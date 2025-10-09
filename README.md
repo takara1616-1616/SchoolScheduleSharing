@@ -1,0 +1,2 @@
+# SchoolScheduleSharing
+学校用スケジュール共有アプリ
