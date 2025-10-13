@@ -60,6 +60,37 @@ export function HomeScreen() {
     fetchAnnouncements();
   }, [navigate]);
 
+  // Utility function to get numeric user_id from users table by email
+  const getUserIdByEmail = async (userEmail: string | undefined): Promise<number | null> => {
+    if (!userEmail) {
+      console.error("No email provided");
+      return null;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', userEmail)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error fetching user_id:", error);
+        return null;
+      }
+
+      if (!data) {
+        console.error("User not found in users table for email:", userEmail);
+        return null;
+      }
+
+      return data.id;
+    } catch (err) {
+      console.error("Exception in getUserIdByEmail:", err);
+      return null;
+    }
+  };
+
   const fetchAnnouncements = async () => {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
@@ -69,6 +100,13 @@ export function HomeScreen() {
     }
 
     try {
+      // Get numeric user_id from users table by email
+      const userId = await getUserIdByEmail(user.email);
+      if (!userId) {
+        toast.error("ユーザー情報の取得に失敗しました");
+        navigate('/');
+        return;
+      }
       // ANNOUNCEMENTS, SUBJECTS, SUBSUBJECTS, USERS を結合してデータを取得
       const { data, error } = await supabase
         .from('announcements')
@@ -113,12 +151,12 @@ export function HomeScreen() {
         }
 
         if (announcement.type === 'assignment') {
-          // SUBMISSIONSテーブルから現在のユーザーの提出状況を取得
+          // SUBMISSIONSテーブルから現在のユーザーの提出状況を取得（numeric user_idを使用）
           const { data: submissionData, error: submissionError } = await supabase
             .from('submissions')
             .select('status')
             .eq('announcement_id', announcement.id)
-            .eq('user_id', user.id)
+            .eq('user_id', userId)
             .single();
 
           if (submissionError && submissionError.code !== 'PGRST116') { // PGRST116はデータがない場合
@@ -191,27 +229,39 @@ export function HomeScreen() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const newStatus = currentStatus ? 'pending' : 'submitted';
+    try {
+      // Get numeric user_id by email
+      const userId = await getUserIdByEmail(user.email);
+      if (!userId) {
+        toast.error("ユーザー情報の取得に失敗しました");
+        return;
+      }
 
-    // SUBMISSIONSテーブルを更新または挿入
-    const { error } = await supabase
-      .from('submissions')
-      .upsert({
-        announcement_id: id,
-        user_id: user.id,
-        status: newStatus,
-        submitted_at: newStatus === 'submitted' ? new Date().toISOString() : null,
-        submission_method: 'unknown', // 仮の値
-      }, { onConflict: 'announcement_id,user_id' });
+      const newStatus = currentStatus ? 'pending' : 'submitted';
 
-    if (error) {
-      console.error("Error updating submission status:", error);
-      alert("提出状況の更新中にエラーが発生しました。");
-    } else {
-      setAssignments((prev) =>
-        prev.map((item) => (item.id === id ? { ...item, isCompleted: !currentStatus } : item))
-      );
-      toast.success("提出状況を更新しました");
+      // SUBMISSIONSテーブルを更新または挿入（numeric user_idを使用）
+      const { error } = await supabase
+        .from('submissions')
+        .upsert({
+          announcement_id: id,
+          user_id: userId,
+          status: newStatus,
+          submitted_at: newStatus === 'submitted' ? new Date().toISOString() : null,
+          submission_method: 'unknown', // 仮の値
+        }, { onConflict: 'announcement_id,user_id' });
+
+      if (error) {
+        console.error("Error updating submission status:", error);
+        toast.error("提出状況の更新中にエラーが発生しました");
+      } else {
+        setAssignments((prev) =>
+          prev.map((item) => (item.id === id ? { ...item, isCompleted: !currentStatus } : item))
+        );
+        toast.success("提出状況を更新しました");
+      }
+    } catch (err: any) {
+      console.error("Error in handleToggleAssignment:", err);
+      toast.error("提出状況の更新中にエラーが発生しました");
     }
   };
 
@@ -479,19 +529,19 @@ export function HomeScreen() {
           <List className="h-5 w-5 text-primary" />
           <span className="text-xs text-primary">お知らせ</span>
         </Button>
-        <Button 
-          onClick={() => navigate("calendar")}
-          variant="ghost" 
-          size="sm" 
+        <Button
+          onClick={() => navigate("/calendar")}
+          variant="ghost"
+          size="sm"
           className="flex-col h-auto py-2 gap-1"
         >
           <Calendar className="h-5 w-5 text-muted-foreground" />
           <span className="text-xs text-muted-foreground">スケジュール</span>
         </Button>
-        <Button 
-          onClick={() => navigate("notifications")}
-          variant="ghost" 
-          size="sm" 
+        <Button
+          onClick={() => navigate("/notifications")}
+          variant="ghost"
+          size="sm"
           className="flex-col h-auto py-2 gap-1 relative"
         >
           <div className="relative">
@@ -502,10 +552,10 @@ export function HomeScreen() {
           </div>
           <span className="text-xs text-muted-foreground">通知</span>
         </Button>
-        <Button 
-          onClick={() => navigate("history")}
-          variant="ghost" 
-          size="sm" 
+        <Button
+          onClick={() => navigate("/history")}
+          variant="ghost"
+          size="sm"
           className="flex-col h-auto py-2 gap-1"
         >
           <FileCheck className="h-5 w-5 text-muted-foreground" />

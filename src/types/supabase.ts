@@ -197,6 +197,67 @@ export type Database = {
         };
         Relationships: [];
       };
+      schedules: {
+        Row: {
+          id: number;
+          user_id: number;
+          subject_id: number | null;
+          subsubject_id: number | null;
+          location_id: number | null;
+          title: string;
+          description: string;
+          start_time: string;
+          end_time: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          user_id: number;
+          subject_id?: number | null;
+          subsubject_id?: number | null;
+          location_id?: number | null;
+          title: string;
+          description: string;
+          start_time: string;
+          end_time: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: number;
+          user_id?: number;
+          subject_id?: number | null;
+          subsubject_id?: number | null;
+          location_id?: number | null;
+          title?: string;
+          description?: string;
+          start_time?: string;
+          end_time?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "schedules_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "schedules_subject_id_fkey";
+            columns: ["subject_id"];
+            isOneToOne: false;
+            referencedRelation: "subjects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "schedules_subsubject_id_fkey";
+            columns: ["subsubject_id"];
+            isOneToOne: false;
+            referencedRelation: "subsubjects";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
