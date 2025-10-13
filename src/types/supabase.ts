@@ -3,7 +3,7 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export type Database = {
   public: {
     Tables: {
-      ANNOUNCEMENTS: {
+      announcements: {
         Row: {
           id: number;
           subject_id: number | null;
@@ -48,26 +48,26 @@ export type Database = {
             foreignKeyName: "ANNOUNCEMENTS_created_by_fkey";
             columns: ["created_by"];
             isOneToOne: false;
-            referencedRelation: "USERS";
+            referencedRelation: "users";
             referencedColumns: ["id"];
           },
           {
             foreignKeyName: "ANNOUNCEMENTS_subject_id_fkey";
             columns: ["subject_id"];
             isOneToOne: false;
-            referencedRelation: "SUBJECTS";
+            referencedRelation: "subjects";
             referencedColumns: ["id"];
           },
           {
             foreignKeyName: "ANNOUNCEMENTS_subsubject_id_fkey";
             columns: ["subsubject_id"];
             isOneToOne: false;
-            referencedRelation: "SUBSUBJECTS";
+            referencedRelation: "subsubjects";
             referencedColumns: ["id"];
           },
         ];
       };
-      SUBJECTS: {
+      subjects: {
         Row: {
           id: number;
           name: string;
@@ -82,7 +82,7 @@ export type Database = {
         };
         Relationships: [];
       };
-      SUBSUBJECTS: {
+      subsubjects: {
         Row: {
           id: number;
           subject_id: number | null;
@@ -103,12 +103,12 @@ export type Database = {
             foreignKeyName: "SUBSUBJECTS_subject_id_fkey";
             columns: ["subject_id"];
             isOneToOne: false;
-            referencedRelation: "SUBJECTS";
+            referencedRelation: "subjects";
             referencedColumns: ["id"];
           },
         ];
       };
-      SUBMISSIONS: {
+      submissions: {
         Row: {
           id: number;
           announcement_id: number | null;
@@ -144,33 +144,33 @@ export type Database = {
             foreignKeyName: "SUBMISSIONS_announcement_id_fkey";
             columns: ["announcement_id"];
             isOneToOne: false;
-            referencedRelation: "ANNOUNCEMENTS";
+            referencedRelation: "announcements";
             referencedColumns: ["id"];
           },
           {
             foreignKeyName: "SUBMISSIONS_subsubject_id_fkey";
             columns: ["subsubject_id"];
             isOneToOne: false;
-            referencedRelation: "SUBSUBJECTS";
+            referencedRelation: "subsubjects";
             referencedColumns: ["id"];
           },
           {
             foreignKeyName: "SUBMISSIONS_teacher_id_fkey";
             columns: ["teacher_id"];
             isOneToOne: false;
-            referencedRelation: "USERS";
+            referencedRelation: "users";
             referencedColumns: ["id"];
           },
           {
             foreignKeyName: "SUBMISSIONS_user_id_fkey";
             columns: ["user_id"];
             isOneToOne: false;
-            referencedRelation: "USERS";
+            referencedRelation: "users";
             referencedColumns: ["id"];
           },
         ];
       };
-      USERS: {
+      users: {
         Row: {
           id: number;
           name: string | null;
