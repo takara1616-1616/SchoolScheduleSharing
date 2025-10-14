@@ -20,7 +20,7 @@ interface Assignment {
   subject: string;
   subsubject: string;
   teacher: string;
-  title: string;
+  // title: string; 
   description: string;
   submission_method: string;
   dueDate: string;
@@ -52,7 +52,7 @@ export function AddAssignmentModal({
     subject: editingAssignment?.subject || "",
     subsubject: "", // 科目名を追加
     teacher: editingAssignment?.teacher || "",
-    title: editingAssignment?.title || "",
+    // title: editingAssignment?.title || "", 
     description: editingAssignment?.description || "",
     submission_method: editingAssignment?.submission_method || "",
     dueDate: editingAssignment?.dueDate || "",
@@ -62,7 +62,7 @@ export function AddAssignmentModal({
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [subjects, setSubjects] = useState<Tables<'subjects'>['Row'][]>([]);
   const [subsubjects, setSubsubjects] = useState<Tables<'subsubjects'>['Row'][]>([]);
-  const [teachers, setTeachers] = useState<Tables<'users'>['Row'][]>([]);
+  // 先生のリストは不要のため削除
 
   useEffect(() => {
     const fetchMasterData = async () => {
@@ -80,26 +80,7 @@ export function AddAssignmentModal({
       if (subsubjectsError) console.error("Error fetching subsubjects:", subsubjectsError);
       else setSubsubjects(subsubjectsData || []);
 
-      // 先生ユーザーの取得 (ROLESテーブルとUSERSテーブルを結合して先生を特定)
-      const { data: teacherRoles, error: teacherRolesError } = await supabase
-        .from('user_roles')
-        .select(`
-          user_id,
-          roles ( name )
-        `)
-        .eq('roles.name', '先生'); // '先生'ロールのIDを直接指定するか、ROLESテーブルから取得
-
-      if (teacherRolesError) {
-        console.error("Error fetching teacher roles:", teacherRolesError);
-      } else {
-        const teacherIds = teacherRoles?.map(tr => tr.user_id) || [];
-        const { data: teachersData, error: teachersError } = await supabase
-          .from('users')
-          .select('*')
-          .in('id', teacherIds);
-        if (teachersError) console.error("Error fetching teachers:", teachersError);
-        else setTeachers(teachersData || []);
-      }
+      // 先生ユーザーの取得処理は不要のため削除
     };
 
     fetchMasterData();
@@ -111,7 +92,7 @@ export function AddAssignmentModal({
         subject: editingAssignment.subject,
         subsubject: editingAssignment.subsubject,
         teacher: editingAssignment.teacher,
-        title: editingAssignment.title,
+        // title: editingAssignment.title, 
         description: editingAssignment.description,
         submission_method: editingAssignment.submission_method,
         dueDate: editingAssignment.dueDate,
@@ -124,7 +105,7 @@ export function AddAssignmentModal({
         subject: "",
         subsubject: "",
         teacher: "",
-        title: "",
+        // title: "", 
         description: "",
         submission_method: "",
         dueDate: "",
@@ -147,7 +128,7 @@ export function AddAssignmentModal({
       !formData.subject ||
       !formData.subsubject ||
       !formData.teacher ||
-      !formData.title ||
+      // !formData.title || 
       !formData.description ||
       !formData.submission_method ||
       !formData.dueDate
@@ -158,10 +139,11 @@ export function AddAssignmentModal({
 
     const selectedSubject = subjects.find(s => s.name === formData.subject);
     const selectedSubsubject = subsubjects.find(ss => ss.name === formData.subsubject);
-    const selectedTeacher = teachers.find(t => t.name === formData.teacher);
+    
+    // 先生の存在チェック（selectedTeacher）は不要のため削除
 
-    if (!selectedSubject || !selectedSubsubject || !selectedTeacher) {
-      toast.error("選択された教科、科目、または先生が見つかりません。");
+    if (!selectedSubject || !selectedSubsubject) {
+      toast.error("選択された教科、または科目が見つかりません。");
       return;
     }
 
@@ -182,7 +164,7 @@ export function AddAssignmentModal({
       subject_id: selectedSubject.id,
       subsubject_id: selectedSubsubject.id,
       created_by: userData?.id || null,
-      title: formData.title,
+      // title: formData.title,
       description: formData.description,
       type: "assignment",
       due_date: formData.dueDate,
@@ -280,56 +262,32 @@ export function AddAssignmentModal({
                 </Select>
               </div>
 
-              {/* Teacher */}
+              {/* Teacher - 入力欄に変更済み */}
               <div className="space-y-2.5">
                 <Label className="text-sm text-foreground">
                   先生（担当者） <span className="text-destructive">*</span>
                 </Label>
-                <Select
-                  value={formData.teacher}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, teacher: value })
-                  }
-                >
-                  <SelectTrigger className="h-12 rounded-xl border-2 border-border bg-white hover:border-primary/50 transition-colors">
-                    <SelectValue placeholder="選択してください" />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl">
-                    {teachers.map((teacher) => (
-                      <SelectItem key={teacher.id} value={teacher.name || ""} className="rounded-lg">
-                        {teacher.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Title (内容) */}
-              <div className="space-y-2.5">
-                <Label className="text-sm text-foreground">
-                  タイトル <span className="text-destructive">*</span>
-                </Label>
                 <Input
-                  value={formData.title}
+                  value={formData.teacher}
                   onChange={(e) =>
-                    setFormData({ ...formData, title: e.target.value })
+                    setFormData({ ...formData, teacher: e.target.value })
                   }
-                  placeholder="例:漢字ドリルP68" // 内容からタイトルに変更
+                  placeholder="例: 山田太郎"
                   className="h-12 rounded-xl border-2 border-border bg-white px-4 hover:border-primary/50 focus:border-primary transition-colors"
                 />
               </div>
 
-              {/* Description (詳細内容) */}
+              {/* Description (詳細内容) - 📌 ここを修正 */}
               <div className="space-y-2.5">
                 <Label className="text-sm text-foreground">
-                  詳細内容
+                  内容
                 </Label>
                 <Input
                   value={formData.description}
                   onChange={(e) =>
                     setFormData({ ...formData, description: e.target.value })
                   }
-                  placeholder="例: 10ページから12ページまで" // 内容からタイトルに変更
+                  placeholder="例: 10ページから12ページまで"
                   className="h-12 rounded-xl border-2 border-border bg-white px-4 hover:border-primary/50 focus:border-primary transition-colors"
                 />
               </div>
@@ -380,17 +338,26 @@ export function AddAssignmentModal({
           </div>
 
           {/* Footer - Fixed at Bottom */}
-          <div className="sticky bottom-0 bg-white border-t border-border px-5 py-4 flex gap-3">
+          <div className="sticky bottom-0 bg-white border-t border-border px-5 py-4 flex gap-3 justify-end">
             <Button
               variant="outline"
               onClick={onClose}
-              className="flex-1 h-12 rounded-xl border-2 border-border text-foreground hover:bg-muted transition-colors"
+              className="h-12 rounded-xl border-2 border-border text-foreground hover:bg-muted transition-colors"
             >
               キャンセル
             </Button>
             <Button
               onClick={handleSubmit}
-              className="flex-1 h-12 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/25 transition-all"
+              // 📌 修正: 濃い色 (bg-gray-800) に戻し、サイズと右寄せを維持
+              className="h-12 rounded-xl bg-gray-800 text-white hover:bg-gray-900 shadow-lg shadow-black/25 transition-all"
+              disabled={
+                !formData.subject ||
+                !formData.subsubject ||
+                !formData.teacher ||
+                !formData.description ||
+                !formData.submission_method ||
+                !formData.dueDate
+              }
             >
               {editingAssignment ? "更新" : "登録"}
             </Button>
