@@ -22,7 +22,6 @@ interface AssignmentItem {
   id: number;
   subject: string;
   subjectColor: string;
-  title: string; 
   teacher?: string;
   description: string;
   deadline: string;
@@ -35,7 +34,6 @@ interface TestItem {
   id: number;
   subject: string;
   subjectColor: string;
-  title: string;
   description: string;
   deadline: string;
   isCompleted: boolean;
@@ -223,7 +221,6 @@ export function HomeScreen() {
             id: announcement.id,
             subject: displaySubject,
             subjectColor: subjectColor,
-            title: announcement.title || "", 
             teacher: teacherName,
             description: announcement.description,
             deadline: deadlineFormatted,
@@ -236,7 +233,6 @@ export function HomeScreen() {
             id: announcement.id,
             subject: displaySubject,
             subjectColor: subjectColor,
-            title: announcement.title || "", 
             description: announcement.description,
             deadline: deadlineFormatted,
             isCompleted: false, // テストの完了状態は別途考慮
@@ -276,7 +272,7 @@ export function HomeScreen() {
   };
 
   // 課題追加処理
-  const handleAddAssignment = async (assignment: { subject: string; subsubject: string; teacher: string; title: string; description: string; submission_method: string; dueDate: string }) => {
+  const handleAddAssignment = async (assignment: { subject: string; subsubject: string; teacher: string; description: string; submission_method: string; dueDate: string }) => {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -292,7 +288,7 @@ export function HomeScreen() {
     const { error } = await supabase
         .from('announcements')
         .insert({
-            title: assignment.title,
+            title: null, // titleはnullで保存
             description: assignment.description,
             type: 'assignment',
             due_date: assignment.dueDate,
@@ -317,7 +313,7 @@ export function HomeScreen() {
     setIsEditModalOpen(true);
   };
 
-  const handleUpdateAssignment = async (assignment: { subject: string; subsubject: string; teacher: string; title: string; description: string; submission_method: string; dueDate: string }) => {
+  const handleUpdateAssignment = async (assignment: { subject: string; subsubject: string; teacher: string; description: string; submission_method: string; dueDate: string }) => {
     // 💡 編集ロジックの実装が必要です。ここでは一旦再取得とトースト表示のみ
     await fetchAnnouncements();
     toast.success("提出物を更新しました");
@@ -572,7 +568,7 @@ export function HomeScreen() {
                 {assignment.subject}
                 </span>
                 <span className="text-base break-words" style={{ fontWeight: 500 }}>
-                {assignment.title}
+                {assignment.description}
                 </span>
                 {assignment.teacher && (
                 <span className="text-base text-muted-foreground whitespace-nowrap">
@@ -599,7 +595,7 @@ export function HomeScreen() {
               // 📌 修正: onClickでhandleToggleAssignmentを呼び出し、必要なデータを渡す
               onClick={(e) => {
                 e.stopPropagation(); // 親要素のクリックイベント (navigate) を停止
-                handleToggleAssignment(assignment.id, assignment.isCompleted, `${assignment.subject} ${assignment.title}`);
+                handleToggleAssignment(assignment.id, assignment.isCompleted, `${assignment.subject} ${assignment.description}`);
               }}
               className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center shrink-0 self-start transition-colors ${
                 assignment.isCompleted
@@ -681,11 +677,8 @@ export function HomeScreen() {
                 {test.subject}
                 </span>
                 <div className="flex-1 min-w-0">
-                <p className="text-base break-words" style={{ fontWeight: 500 }}>
-                  {test.title}
-                </p>
                 {test.description && (
-                  <p className="text-base text-foreground mt-1 break-words whitespace-pre-line" style={{ fontWeight: 500 }}>
+                  <p className="text-base text-foreground break-words whitespace-pre-line" style={{ fontWeight: 500 }}>
                   {test.description}
                   </p>
                 )}
@@ -860,16 +853,15 @@ export function HomeScreen() {
       open={isEditSelectModalOpen}
       onClose={() => setIsEditSelectModalOpen(false)}
       assignments={assignments.map((a) => ({
-        id: a.id.toString(),
+        id: a.id,
         subject: a.subject,
         subjectColor: a.subjectColor,
-        deadline: a.deadline,
-        round: a.teacher || "",
-        name: a.title,
+        teacher: a.teacher,
         description: a.description,
-        submitTo: a.submission_method,
-        dueDate: a.deadline,
-        isCompleted: a.isCompleted || false,
+        deadline: a.deadline,
+        isUrgent: a.isUrgent,
+        isCompleted: a.isCompleted,
+        submission_method: a.submission_method,
       }))}
       onSelectAssignment={handleSelectAssignmentToEdit}
       />
@@ -882,16 +874,12 @@ export function HomeScreen() {
       }}
       onSave={handleUpdateAssignment}
       editingAssignment={editingAssignment ? {
-        id: editingAssignment.id.toString(),
         subject: editingAssignment.subject,
-        subjectColor: editingAssignment.subjectColor,
-        deadline: editingAssignment.deadline,
-        round: editingAssignment.teacher || "",
-        name: editingAssignment.title,
+        subsubject: "",
+        teacher: editingAssignment.teacher || "",
         description: editingAssignment.description,
-        submitTo: editingAssignment.submission_method,
+        submission_method: editingAssignment.submission_method,
         dueDate: editingAssignment.deadline,
-        isCompleted: editingAssignment.isCompleted || false,
       } : undefined}
       />
 
@@ -905,12 +893,12 @@ export function HomeScreen() {
       open={isEditTestSelectModalOpen}
       onClose={() => setIsEditTestSelectModalOpen(false)}
       tests={tests.map((t) => ({
-        id: t.id.toString(),
+        id: t.id,
         subject: t.subject,
         subjectColor: t.subjectColor,
-        course: t.title,
-        content: t.description,
-        testDate: t.deadline,
+        description: t.description,
+        deadline: t.deadline,
+        isCompleted: t.isCompleted,
       }))}
       onSelectTest={handleSelectTestToEdit}
       />
@@ -927,7 +915,7 @@ export function HomeScreen() {
         ? {
           subject: editingTest.subject,
           subsubject: "",
-          title: editingTest.title,
+          title: editingTest.description,
           description: editingTest.description,
           testDate: editingTest.deadline,
           }

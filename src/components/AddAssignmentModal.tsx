@@ -20,7 +20,6 @@ interface Assignment {
   subject: string;
   subsubject: string;
   teacher: string;
-  // title: string; 
   description: string;
   submission_method: string;
   dueDate: string;
@@ -128,7 +127,6 @@ export function AddAssignmentModal({
       !formData.subject ||
       !formData.subsubject ||
       !formData.teacher ||
-      // !formData.title ||
       !formData.description ||
       !formData.submission_method ||
       !formData.dueDate
@@ -137,14 +135,8 @@ export function AddAssignmentModal({
       return;
     }
 
-    // Generate title from description (first line, max 50 chars)
-    const title = formData.description.trim().split('\n')[0].substring(0, 50);
-
     // Pass data to parent component for handling Supabase insertion
-    onSave({
-      ...formData,
-      title, // Include generated title
-    });
+    onSave(formData);
 
     // Reset form
     setFormData({

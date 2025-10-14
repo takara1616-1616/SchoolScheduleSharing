@@ -8,7 +8,6 @@ interface TestRange {
   id: number;
   subject: string;
   subjectColor: string;
-  title: string;
   description: string;
   deadline: string;
   isCompleted: boolean;
@@ -67,16 +66,13 @@ export function EditTestRangeModal({ open, onClose, tests, onSelectTest }: EditT
                         <Edit className="h-4 w-4 text-muted-foreground shrink-0" />
                       </div>
 
-                      {/* Middle: Subject & Course */}
+                      {/* Middle: Subject */}
                       <div className="flex items-center gap-2 flex-wrap">
                         <span
                           className="text-sm px-2.5 py-1 rounded-lg text-white whitespace-nowrap"
                           style={{ backgroundColor: test.subjectColor, fontWeight: 500 }}
                         >
                           {test.subject}
-                        </span>
-                        <span className="text-sm" style={{ fontWeight: 500 }}>
-                          {test.title}
                         </span>
                       </div>
 

@@ -337,9 +337,19 @@ export function TeacherScreen({ onBack }: TeacherScreenProps) {
     }
   };
 
-  const handleSaveAssignment = async (newAssignment: Omit<Assignment, "id">) => {
+  const handleSaveAssignment = async (modalData: { subject: string; subsubject: string; teacher: string; description: string; submission_method: string; dueDate: string }) => {
     try {
-      await teacherData.createAssignment(newAssignment);
+      // Convert from AddAssignmentModal format to TeacherScreen format
+      const assignmentData: Omit<Assignment, "id"> = {
+        subject: modalData.subject,
+        subjectColor: "#7B9FE8", // Default color, should be determined based on subject
+        course: modalData.subsubject,
+        content: modalData.description,
+        submitTo: modalData.submission_method,
+        deadline: modalData.dueDate,
+        isChecked: false,
+      };
+      await teacherData.createAssignment(assignmentData);
       toast.success('提出物を追加しました');
       await loadAllData();
     } catch (error) {

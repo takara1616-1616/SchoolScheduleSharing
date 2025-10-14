@@ -7,7 +7,6 @@ interface Assignment {
   id: number;
   subject: string;
   subjectColor: string;
-  title: string;
   teacher?: string;
   description: string;
   deadline: string;
@@ -70,7 +69,7 @@ export function EditAssignmentModal({
                     {assignment.subject}
                   </span>
                   <span className="text-sm flex-1 min-w-0 break-words overflow-hidden" style={{ fontWeight: 500 }}>
-                    {assignment.title}
+                    {assignment.description}
                   </span>
                 </div>
                 <div className="text-sm text-muted-foreground px-2 break-words">
