@@ -339,16 +339,38 @@ export function HomeScreen() {
 
       const newStatus = currentStatus ? 'pending' : 'submitted';
 
-      // SUBMISSIONSテーブルを更新または挿入（numeric user_idを使用）
-      const { error } = await supabase
+      // Check if submission already exists
+      const { data: existingSubmission } = await supabase
         .from('submissions')
-        .upsert({
-          announcement_id: id,
-          user_id: userId,
-          status: newStatus,
-          submitted_at: newStatus === 'submitted' ? new Date().toISOString() : null,
-          submission_method: 'unknown', // 提出方法を追跡する場合
-        }, { onConflict: 'announcement_id,user_id' });
+        .select('id')
+        .eq('announcement_id', id)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      let error;
+      if (existingSubmission) {
+        // Update existing submission
+        const result = await supabase
+          .from('submissions')
+          .update({
+            status: newStatus,
+            submitted_at: newStatus === 'submitted' ? new Date().toISOString() : null,
+          })
+          .eq('announcement_id', id)
+          .eq('user_id', userId);
+        error = result.error;
+      } else {
+        // Insert new submission
+        const result = await supabase
+          .from('submissions')
+          .insert({
+            announcement_id: id,
+            user_id: userId,
+            status: newStatus,
+            submitted_at: newStatus === 'submitted' ? new Date().toISOString() : null,
+          });
+        error = result.error;
+      }
 
       if (error) {
         console.error("Error updating submission status:", error);

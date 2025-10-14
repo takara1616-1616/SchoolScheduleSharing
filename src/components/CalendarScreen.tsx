@@ -15,7 +15,6 @@ interface Assignment {
   id: number;
   subject: string;
   subjectColor: string;
-  title: string;
   teacher?: string;
   description: string;
   deadline: string;
@@ -196,7 +195,6 @@ export function CalendarScreen() {
           id: announcement.id,
           subject: displaySubject,
           subjectColor: subjectColor,
-          title: announcement.title,
           teacher: teacherName,
           description: announcement.description,
           deadline: deadlineFormatted,
@@ -455,15 +453,38 @@ export function CalendarScreen() {
 
       const newStatus = currentStatus ? 'pending' : 'submitted';
 
-      const { error } = await supabase
+      // Check if submission already exists
+      const { data: existingSubmission } = await supabase
         .from('submissions')
-        .upsert({
-          announcement_id: id,
-          user_id: userIdToUse as any,
-          status: newStatus,
-          submitted_at: newStatus === 'submitted' ? new Date().toISOString() : null,
-          submission_method: 'unknown',
-        }, { onConflict: 'announcement_id,user_id' });
+        .select('id')
+        .eq('announcement_id', id)
+        .eq('user_id', userIdToUse)
+        .maybeSingle();
+
+      let error;
+      if (existingSubmission) {
+        // Update existing submission
+        const result = await supabase
+          .from('submissions')
+          .update({
+            status: newStatus,
+            submitted_at: newStatus === 'submitted' ? new Date().toISOString() : null,
+          })
+          .eq('announcement_id', id)
+          .eq('user_id', userIdToUse);
+        error = result.error;
+      } else {
+        // Insert new submission
+        const result = await supabase
+          .from('submissions')
+          .insert({
+            announcement_id: id,
+            user_id: userIdToUse as any,
+            status: newStatus,
+            submitted_at: newStatus === 'submitted' ? new Date().toISOString() : null,
+          });
+        error = result.error;
+      }
 
       if (error) {
         console.error("Error updating submission status:", error);
@@ -535,16 +556,13 @@ export function CalendarScreen() {
                             </span>
                           </div>
 
-                          {/* Middle: Subject, Title, Teacher */}
+                          {/* Middle: Subject, Teacher */}
                           <div className="flex items-center gap-1 flex-wrap text-xs">
                             <span
                               className="px-1.5 py-0.5 rounded text-white whitespace-nowrap"
                               style={{ backgroundColor: assignment.subjectColor, fontWeight: 500 }}
                             >
                               {assignment.subject}
-                            </span>
-                            <span style={{ fontWeight: 500 }}>
-                              {assignment.title}
                             </span>
                             {assignment.teacher && (
                               <span style={{ fontWeight: 500 }}>
