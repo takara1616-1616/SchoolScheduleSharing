@@ -1,4 +1,4 @@
-import { Bell, Edit, Plus, Check, List, Calendar, FileCheck } from "lucide-react";
+import { Edit, Plus, Check, List, Calendar, FileCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -12,6 +12,8 @@ import { AddAssignmentModal } from "./AddAssignmentModal";
 import { EditAssignmentModal } from "./EditAssignmentModal";
 import { AddTestRangeModal } from "./AddTestRangeModal";
 import { EditTestRangeModal } from "./EditTestRangeModal";
+import { NotificationBadge } from "./NotificationBadge";
+import { useNotifications } from "../hooks/useNotifications";
 
 // 仮の型定義 (FigmaのモックデータとSupabaseのER図を統合)
 interface AssignmentItem {
@@ -51,12 +53,26 @@ export function HomeScreen() {
   const [isEditTestSelectModalOpen, setIsEditTestSelectModalOpen] = useState(false);
   const [isEditTestModalOpen, setIsEditTestModalOpen] = useState(false);
   const [editingTest, setEditingTest] = useState<TestItem | null>(null);
+  const [userId, setUserId] = useState<number | null>(null);
+
+  // Fetch notification count
+  const { totalCount: notificationCount } = useNotifications(userId);
 
   const today = new Date();
   const dateStr = `${today.getMonth() + 1}月${today.getDate()}日`;
   const dayOfWeek = ["日", "月", "火", "水", "木", "金", "土"][today.getDay()];
 
   useEffect(() => {
+    const initUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        navigate('/');
+        return;
+      }
+      const id = await getUserIdByEmail(user.email);
+      setUserId(id);
+    };
+    initUser();
     fetchAnnouncements();
   }, [navigate]);
 
@@ -208,9 +224,59 @@ export function HomeScreen() {
     }
   };
 
-  const handleAddAssignment = async (assignment: { subject: string; subsubject: string; teacher: string; title: string; description: string; submission_method: string; dueDate: string }) => {
-    await fetchAnnouncements();
-    toast.success("提出物を追加しました");
+  const handleAddAssignment = async (assignment: any) => {
+    try {
+      const userId = await getUserIdByEmail((await supabase.auth.getUser()).data.user?.email);
+      if (!userId) {
+        toast.error("ユーザー情報の取得に失敗しました");
+        return;
+      }
+
+      // Parse date string to ISO format
+      const dateMatch = assignment.deadline.match(/(\d+)月(\d+)日/);
+      let dueDate = null;
+      if (dateMatch) {
+        const month = parseInt(dateMatch[1]);
+        const day = parseInt(dateMatch[2]);
+        const year = new Date().getFullYear();
+        dueDate = new Date(year, month - 1, day).toISOString();
+      }
+
+      // Find subject and subsubject IDs
+      const { data: subjectData } = await supabase
+        .from('subjects')
+        .select('id')
+        .eq('name', assignment.subject)
+        .maybeSingle();
+
+      const { data: subsubjectData } = await supabase
+        .from('subsubjects')
+        .select('id')
+        .eq('name', assignment.course || '')
+        .maybeSingle();
+
+      // Insert announcement
+      const { error } = await supabase
+        .from('announcements')
+        .insert({
+          subject_id: subjectData?.id || null,
+          subsubject_id: subsubjectData?.id || null,
+          created_by: userId,
+          title: assignment.content || 'タイトルなし',
+          description: assignment.content || '',
+          type: 'assignment',
+          due_date: dueDate,
+          submission_method: assignment.submitTo || '',
+        });
+
+      if (error) throw error;
+
+      await fetchAnnouncements();
+      toast.success("提出物を追加しました");
+    } catch (error) {
+      console.error('Error adding assignment:', error);
+      toast.error("提出物の追加に失敗しました");
+    }
   };
 
   const handleSelectAssignmentToEdit = (assignment: AssignmentItem) => {
@@ -218,11 +284,40 @@ export function HomeScreen() {
     setIsEditModalOpen(true);
   };
 
-  const handleUpdateAssignment = async (assignment: { subject: string; subsubject: string; teacher: string; title: string; description: string; submission_method: string; dueDate: string }) => {
-    await fetchAnnouncements();
-    toast.success("提出物を更新しました");
-    setIsEditModalOpen(false);
-    setEditingAssignment(null);
+  const handleUpdateAssignment = async (assignment: any) => {
+    try {
+      if (!editingAssignment) return;
+
+      // Parse date string to ISO format
+      const dateMatch = assignment.deadline.match(/(\d+)月(\d+)日/);
+      let dueDate = null;
+      if (dateMatch) {
+        const month = parseInt(dateMatch[1]);
+        const day = parseInt(dateMatch[2]);
+        const year = new Date().getFullYear();
+        dueDate = new Date(year, month - 1, day).toISOString();
+      }
+
+      const { error } = await supabase
+        .from('announcements')
+        .update({
+          title: assignment.content || 'タイトルなし',
+          description: assignment.content || '',
+          due_date: dueDate,
+          submission_method: assignment.submitTo || '',
+        })
+        .eq('id', editingAssignment.id);
+
+      if (error) throw error;
+
+      await fetchAnnouncements();
+      toast.success("提出物を更新しました");
+      setIsEditModalOpen(false);
+      setEditingAssignment(null);
+    } catch (error) {
+      console.error('Error updating assignment:', error);
+      toast.error("提出物の更新に失敗しました");
+    }
   };
 
   const handleToggleAssignment = async (id: number, currentStatus: boolean) => {
@@ -271,9 +366,59 @@ export function HomeScreen() {
     console.log(`Test ${id} toggle status: ${!currentStatus}`);
   };
 
-  const handleAddTest = async (testRange: { subject: string; subsubject: string; title: string; description: string; testDate: string }) => {
-    await fetchAnnouncements();
-    toast.success("テスト範囲を追加しました");
+  const handleAddTest = async (testRange: any) => {
+    try {
+      const userId = await getUserIdByEmail((await supabase.auth.getUser()).data.user?.email);
+      if (!userId) {
+        toast.error("ユーザー情報の取得に失敗しました");
+        return;
+      }
+
+      // Parse date string to ISO format
+      const dateMatch = testRange.testDate.match(/(\d+)月(\d+)日/);
+      let testDate = null;
+      if (dateMatch) {
+        const month = parseInt(dateMatch[1]);
+        const day = parseInt(dateMatch[2]);
+        const year = new Date().getFullYear();
+        testDate = new Date(year, month - 1, day).toISOString();
+      }
+
+      // Find subject and subsubject IDs
+      const { data: subjectData } = await supabase
+        .from('subjects')
+        .select('id')
+        .eq('name', testRange.subject)
+        .maybeSingle();
+
+      const { data: subsubjectData } = await supabase
+        .from('subsubjects')
+        .select('id')
+        .eq('name', testRange.course || '')
+        .maybeSingle();
+
+      // Insert announcement
+      const { error } = await supabase
+        .from('announcements')
+        .insert({
+          subject_id: subjectData?.id || null,
+          subsubject_id: subsubjectData?.id || null,
+          created_by: userId,
+          title: testRange.content || 'タイトルなし',
+          description: testRange.content || '',
+          type: 'test',
+          due_date: testDate,
+          submission_method: '',
+        });
+
+      if (error) throw error;
+
+      await fetchAnnouncements();
+      toast.success("テスト範囲を追加しました");
+    } catch (error) {
+      console.error('Error adding test:', error);
+      toast.error("テスト範囲の追加に失敗しました");
+    }
   };
 
   const handleSelectTestToEdit = (test: TestItem) => {
@@ -281,11 +426,39 @@ export function HomeScreen() {
     setIsEditTestModalOpen(true);
   };
 
-  const handleUpdateTest = async (testRange: { subject: string; subsubject: string; title: string; description: string; testDate: string }) => {
-    await fetchAnnouncements();
-    toast.success("テスト範囲を更新しました");
-    setIsEditTestModalOpen(false);
-    setEditingTest(null);
+  const handleUpdateTest = async (testRange: any) => {
+    try {
+      if (!editingTest) return;
+
+      // Parse date string to ISO format
+      const dateMatch = testRange.testDate.match(/(\d+)月(\d+)日/);
+      let testDate = null;
+      if (dateMatch) {
+        const month = parseInt(dateMatch[1]);
+        const day = parseInt(dateMatch[2]);
+        const year = new Date().getFullYear();
+        testDate = new Date(year, month - 1, day).toISOString();
+      }
+
+      const { error } = await supabase
+        .from('announcements')
+        .update({
+          title: testRange.content || 'タイトルなし',
+          description: testRange.content || '',
+          due_date: testDate,
+        })
+        .eq('id', editingTest.id);
+
+      if (error) throw error;
+
+      await fetchAnnouncements();
+      toast.success("テスト範囲を更新しました");
+      setIsEditTestModalOpen(false);
+      setEditingTest(null);
+    } catch (error) {
+      console.error('Error updating test:', error);
+      toast.error("テスト範囲の更新に失敗しました");
+    }
   };
 
   if (loading) {
@@ -542,14 +715,9 @@ export function HomeScreen() {
           onClick={() => navigate("/notifications")}
           variant="ghost"
           size="sm"
-          className="flex-col h-auto py-2 gap-1 relative"
+          className="flex-col h-auto py-2 gap-1"
         >
-          <div className="relative">
-          <Bell className="h-5 w-5 text-muted-foreground" />
-          <span className="absolute -top-1 -right-1 bg-destructive text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center" style={{ fontWeight: 600 }}>
-            3
-          </span>
-          </div>
+          <NotificationBadge count={notificationCount} />
           <span className="text-xs text-muted-foreground">通知</span>
         </Button>
         <Button

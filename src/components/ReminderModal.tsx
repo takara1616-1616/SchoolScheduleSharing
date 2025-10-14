@@ -77,16 +77,50 @@ export function ReminderModal({
     }
   }, [open, announcementId]);
 
+  // Utility function to get numeric user_id from users table by email
+  const getUserIdByEmail = async (userEmail: string | undefined): Promise<number | null> => {
+    if (!userEmail) {
+      console.error("No email provided");
+      return null;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', userEmail)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error fetching user_id:", error);
+        return null;
+      }
+
+      if (!data) {
+        console.error("User not found in users table for email:", userEmail);
+        return null;
+      }
+
+      return data.id;
+    } catch (err) {
+      console.error("Exception in getUserIdByEmail:", err);
+      return null;
+    }
+  };
+
   const fetchExistingReminders = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     try {
+      const userId = await getUserIdByEmail(user.email);
+      if (!userId) return;
+
       const { data, error } = await supabase
         .from('reminders')
         .select('*')
         .eq('announcement_id', announcementId)
-        .eq('user_id', user.id);
+        .eq('user_id', userId);
 
       if (error) throw error;
       setExistingReminders(data || []);
@@ -115,6 +149,12 @@ export function ReminderModal({
     setLoading(true);
 
     try {
+      const userId = await getUserIdByEmail(user.email);
+      if (!userId) {
+        toast.error("ユーザー情報の取得に失敗しました");
+        return;
+      }
+
       const option = reminderOptions.find(opt => opt.id === selected);
       if (!option) throw new Error("Invalid option");
 
@@ -124,9 +164,9 @@ export function ReminderModal({
       const { error } = await supabase
         .from('reminders')
         .insert({
-          user_id: user.id,
+          user_id: userId,
           announcement_id: announcementId,
-          reminder_time: reminderDateTime.toISOString(),
+          remind_at: reminderDateTime.toISOString(),
         });
 
       if (error) throw error;
@@ -204,7 +244,7 @@ export function ReminderModal({
                   className="flex items-center justify-between p-3 bg-muted rounded-lg"
                 >
                   <span className="text-sm">
-                    {formatReminderTime(reminder.reminder_time)}
+                    {formatReminderTime(reminder.remind_at)}
                   </span>
                   <Button
                     variant="ghost"

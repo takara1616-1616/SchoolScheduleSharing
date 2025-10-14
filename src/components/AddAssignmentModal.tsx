@@ -1,37 +1,74 @@
 import { useState, useEffect } from "react";
 import { X, CalendarIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Calendar } from "@/components/ui/calendar";
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
+} from "./ui/select";
+import { Calendar } from "./ui/calendar";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "./ui/drawer";
 import { toast } from "sonner";
-import { supabase } from "../lib/supabaseClient";
-import { Tables } from "../types/supabase";
 
 interface Assignment {
   subject: string;
-  subsubject: string;
-  teacher: string;
-  title: string;
-  description: string;
-  submission_method: string;
-  dueDate: string;
+  subjectColor: string;
+  course: string;
+  content: string;
+  submitTo: string;
+  deadline: string;
 }
 
 interface AddAssignmentModalProps {
   open: boolean;
   onClose: () => void;
-  onSave: (assignment: Omit<Assignment, "id">) => void;
-  editingAssignment?: Assignment | null;
+  onSave: (assignment: any) => void;  // Flexible type to work with both HomeScreen and TeacherScreen
+  editingAssignment?: any;
 }
+
+const subjects = [
+  { name: "国語", color: "#FF9F9F" },
+  { name: "数学", color: "#7B9FE8" },
+  { name: "英語", color: "#FFD6A5" },
+  { name: "理科", color: "#A8E8D8" },
+  { name: "社会", color: "#B8A8E8" },
+];
+
+const courses = [
+  "現代の国語",
+  "言語文化",
+  "論理国語",
+  "文学国語",
+  "数学I",
+  "数学II",
+  "数学A",
+  "数学B",
+  "英語コミュニケーションI",
+  "英語コミュニケーションII",
+  "論理・表現I",
+  "論理・表現II",
+  "物理基礎",
+  "化学基礎",
+  "生物基礎",
+  "地学基礎",
+  "地理総合",
+  "歴史総合",
+  "公共",
+];
+
+const teachers = [
+  "田中先生",
+  "佐藤先生",
+  "鈴木先生",
+  "山田先生",
+  "中村先生",
+  "小林先生",
+  "その他",
+];
 
 const submitMethods = [
   "先生へ直接",
@@ -48,86 +85,33 @@ export function AddAssignmentModal({
   onSave,
   editingAssignment,
 }: AddAssignmentModalProps) {
-  const [formData, setFormData] = useState<Assignment>({
+  const [formData, setFormData] = useState({
     subject: editingAssignment?.subject || "",
-    subsubject: "", // 科目名を追加
-    teacher: editingAssignment?.teacher || "",
-    title: editingAssignment?.title || "",
-    description: editingAssignment?.description || "",
-    submission_method: editingAssignment?.submission_method || "",
-    dueDate: editingAssignment?.dueDate || "",
+    course: editingAssignment?.course || "",
+    content: editingAssignment?.content || "",
+    submitTo: editingAssignment?.submitTo || "",
+    deadline: editingAssignment?.deadline || "",
   });
 
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
-  const [subjects, setSubjects] = useState<Tables<'subjects'>['Row'][]>([]);
-  const [subsubjects, setSubsubjects] = useState<Tables<'subsubjects'>['Row'][]>([]);
-  const [teachers, setTeachers] = useState<Tables<'users'>['Row'][]>([]);
-
-  useEffect(() => {
-    const fetchMasterData = async () => {
-      // 教科の取得
-      const { data: subjectsData, error: subjectsError } = await supabase
-        .from('subjects')
-        .select('id, name');
-      if (subjectsError) console.error("Error fetching subjects:", subjectsError);
-      else setSubjects(subjectsData || []);
-
-      // 科目の取得
-      const { data: subsubjectsData, error: subsubjectsError } = await supabase
-        .from('subsubjects')
-        .select('id, subject_id, name');
-      if (subsubjectsError) console.error("Error fetching subsubjects:", subsubjectsError);
-      else setSubsubjects(subsubjectsData || []);
-
-      // 先生ユーザーの取得 (ROLESテーブルとUSERSテーブルを結合して先生を特定)
-      const { data: teacherRoles, error: teacherRolesError } = await supabase
-        .from('user_roles')
-        .select(`
-          user_id,
-          roles ( name )
-        `)
-        .eq('roles.name', '先生'); // '先生'ロールのIDを直接指定するか、ROLESテーブルから取得
-
-      if (teacherRolesError) {
-        console.error("Error fetching teacher roles:", teacherRolesError);
-      } else {
-        const teacherIds = teacherRoles?.map(tr => tr.user_id) || [];
-        const { data: teachersData, error: teachersError } = await supabase
-          .from('users')
-          .select('*')
-          .in('id', teacherIds);
-        if (teachersError) console.error("Error fetching teachers:", teachersError);
-        else setTeachers(teachersData || []);
-      }
-    };
-
-    fetchMasterData();
-  }, []);
 
   useEffect(() => {
     if (open && editingAssignment) {
       setFormData({
         subject: editingAssignment.subject,
-        subsubject: editingAssignment.subsubject,
-        teacher: editingAssignment.teacher,
-        title: editingAssignment.title,
-        description: editingAssignment.description,
-        submission_method: editingAssignment.submission_method,
-        dueDate: editingAssignment.dueDate,
+        course: editingAssignment.course,
+        content: editingAssignment.content,
+        submitTo: editingAssignment.submitTo,
+        deadline: editingAssignment.deadline,
       });
-      if (editingAssignment.dueDate) {
-        setSelectedDate(new Date(editingAssignment.dueDate));
-      }
     } else if (open) {
       setFormData({
         subject: "",
-        subsubject: "",
-        teacher: "",
-        title: "",
-        description: "",
-        submission_method: "",
-        dueDate: "",
+        course: "",
+        content: "",
+        submitTo: "",
+        deadline: "",
       });
       setSelectedDate(undefined);
     }
@@ -136,69 +120,50 @@ export function AddAssignmentModal({
   const handleDateSelect = (date: Date | undefined) => {
     setSelectedDate(date);
     if (date) {
-      const dateString = date.toISOString(); // ISO形式で保存
-      setFormData({ ...formData, dueDate: dateString });
+      const month = date.getMonth() + 1;
+      const day = date.getDate();
+      const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
+      const weekday = weekdays[date.getDay()];
+      const dateString = `${month}月${day}日(${weekday})`;
+      setFormData({ ...formData, deadline: dateString });
       setIsCalendarOpen(false);
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (
       !formData.subject ||
-      !formData.subsubject ||
-      !formData.teacher ||
-      !formData.title ||
-      !formData.description ||
-      !formData.submission_method ||
-      !formData.dueDate
+      !formData.course ||
+      !formData.content ||
+      !formData.submitTo ||
+      !formData.deadline
     ) {
       toast.error("すべての項目を入力してください");
       return;
     }
 
-    const selectedSubject = subjects.find(s => s.name === formData.subject);
-    const selectedSubsubject = subsubjects.find(ss => ss.name === formData.subsubject);
-    const selectedTeacher = teachers.find(t => t.name === formData.teacher);
+    const subjectData = subjects.find((s) => s.name === formData.subject);
 
-    if (!selectedSubject || !selectedSubsubject || !selectedTeacher) {
-      toast.error("選択された教科、科目、または先生が見つかりません。");
-      return;
-    }
+    onSave({
+      subject: formData.subject,
+      subjectColor: subjectData?.color || "#D8D8D8",
+      course: formData.course,
+      content: formData.content,
+      submitTo: formData.submitTo,
+      deadline: formData.deadline,
+    });
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      toast.error("ユーザーが認証されていません。");
-      return;
-    }
+    // Reset form
+    setFormData({
+      subject: "",
+      course: "",
+      content: "",
+      submitTo: "",
+      deadline: "",
+    });
+    setSelectedDate(undefined);
 
-    // Get the user's internal ID from USERS table
-    const { data: userData } = await supabase
-      .from('users')
-      .select('id')
-      .eq('ms_account_id', user.id)
-      .single();
-
-    const newAnnouncement: Tables<'announcements'>['Insert'] = {
-      subject_id: selectedSubject.id,
-      subsubject_id: selectedSubsubject.id,
-      created_by: userData?.id || null,
-      title: formData.title,
-      description: formData.description,
-      type: "assignment",
-      due_date: formData.dueDate,
-      submission_method: formData.submission_method,
-    };
-
-    const { error } = await supabase.from('announcements').insert(newAnnouncement);
-
-    if (error) {
-      console.error("Error adding assignment:", error);
-      toast.error("提出物の登録中にエラーが発生しました。");
-    } else {
-      toast.success("提出物を登録しました。");
-      onSave(formData); // 親コンポーネントに保存を通知
-      onClose();
-    }
+    onClose();
   };
 
   if (!open) return null;
@@ -240,12 +205,12 @@ export function AddAssignmentModal({
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
                     {subjects.map((subject) => (
-                      <SelectItem key={subject.id} value={subject.name} className="rounded-lg">
+                      <SelectItem key={subject.name} value={subject.name} className="rounded-lg">
                         <div className="flex items-center gap-2.5">
-                          {/* <div
+                          <div
                             className="w-3.5 h-3.5 rounded-full"
                             style={{ backgroundColor: subject.color }}
-                          /> */}
+                          />
                           {subject.name}
                         </div>
                       </SelectItem>
@@ -254,82 +219,41 @@ export function AddAssignmentModal({
                 </Select>
               </div>
 
-              {/* Subsubject (科目) */}
+              {/* Course */}
               <div className="space-y-2.5">
                 <Label className="text-sm text-foreground">
                   科目 <span className="text-destructive">*</span>
                 </Label>
                 <Select
-                  value={formData.subsubject}
+                  value={formData.course}
                   onValueChange={(value) =>
-                    setFormData({ ...formData, subsubject: value })
+                    setFormData({ ...formData, course: value })
                   }
                 >
                   <SelectTrigger className="h-12 rounded-xl border-2 border-border bg-white hover:border-primary/50 transition-colors">
                     <SelectValue placeholder="選択してください" />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
-                    {subsubjects
-                      .filter(ss => ss.subject_id === subjects.find(s => s.name === formData.subject)?.id)
-                      .map((subsubject) => (
-                        <SelectItem key={subsubject.id} value={subsubject.name} className="rounded-lg">
-                          {subsubject.name}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Teacher */}
-              <div className="space-y-2.5">
-                <Label className="text-sm text-foreground">
-                  先生（担当者） <span className="text-destructive">*</span>
-                </Label>
-                <Select
-                  value={formData.teacher}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, teacher: value })
-                  }
-                >
-                  <SelectTrigger className="h-12 rounded-xl border-2 border-border bg-white hover:border-primary/50 transition-colors">
-                    <SelectValue placeholder="選択してください" />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl">
-                    {teachers.map((teacher) => (
-                      <SelectItem key={teacher.id} value={teacher.name || ""} className="rounded-lg">
-                        {teacher.name}
+                    {courses.map((course) => (
+                      <SelectItem key={course} value={course} className="rounded-lg">
+                        {course}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              {/* Title (内容) */}
+              {/* Content */}
               <div className="space-y-2.5">
                 <Label className="text-sm text-foreground">
-                  タイトル <span className="text-destructive">*</span>
+                  内容 <span className="text-destructive">*</span>
                 </Label>
                 <Input
-                  value={formData.title}
+                  value={formData.content}
                   onChange={(e) =>
-                    setFormData({ ...formData, title: e.target.value })
+                    setFormData({ ...formData, content: e.target.value })
                   }
-                  placeholder="例:漢字ドリルP68" // 内容からタイトルに変更
-                  className="h-12 rounded-xl border-2 border-border bg-white px-4 hover:border-primary/50 focus:border-primary transition-colors"
-                />
-              </div>
-
-              {/* Description (詳細内容) */}
-              <div className="space-y-2.5">
-                <Label className="text-sm text-foreground">
-                  詳細内容
-                </Label>
-                <Input
-                  value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
-                  placeholder="例: 10ページから12ページまで" // 内容からタイトルに変更
+                  placeholder="例:漢字ドリルP68"
                   className="h-12 rounded-xl border-2 border-border bg-white px-4 hover:border-primary/50 focus:border-primary transition-colors"
                 />
               </div>
@@ -340,9 +264,9 @@ export function AddAssignmentModal({
                   提出方法 <span className="text-destructive">*</span>
                 </Label>
                 <Select
-                  value={formData.submission_method}
+                  value={formData.submitTo}
                   onValueChange={(value) =>
-                    setFormData({ ...formData, submission_method: value })
+                    setFormData({ ...formData, submitTo: value })
                   }
                 >
                   <SelectTrigger className="h-12 rounded-xl border-2 border-border bg-white hover:border-primary/50 transition-colors">
@@ -369,8 +293,8 @@ export function AddAssignmentModal({
                   className="w-full h-12 rounded-xl border-2 border-border bg-white hover:border-primary/50 transition-colors flex items-center px-4 text-left"
                 >
                   <CalendarIcon className="mr-2.5 h-5 w-5 shrink-0 text-primary" />
-                  {formData.dueDate ? (
-                    <span className="text-foreground">{new Date(formData.dueDate).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' })}</span>
+                  {formData.deadline ? (
+                    <span className="text-foreground">{formData.deadline}</span>
                   ) : (
                     <span className="text-muted-foreground">日付を選択してください</span>
                   )}

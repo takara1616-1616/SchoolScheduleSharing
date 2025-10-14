@@ -1,4 +1,4 @@
-import { Check, Plus, List, Calendar as CalendarIcon, Bell, FileCheck } from "lucide-react";
+import { Check, Plus, List, Calendar as CalendarIcon, FileCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Calendar } from "@/components/ui/calendar";
@@ -8,6 +8,8 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { toast } from "sonner";
 import { SUBJECT_COLORS } from "../constants/colors";
+import { NotificationBadge } from "./NotificationBadge";
+import { useNotifications } from "../hooks/useNotifications";
 
 interface Assignment {
   id: number;
@@ -23,6 +25,7 @@ interface Assignment {
 }
 
 interface ScheduleEntry {
+  id?: number; // schedule id from database
   date: string; // "10/27"
   timeSlot: number; // 1-7
   subject: string; // 教科
@@ -69,8 +72,20 @@ export function CalendarScreen() {
   const [selectedCell, setSelectedCell] = useState<{ date: string; slot: number } | null>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<number | null>(null);
+
+  // Fetch notification count
+  const { totalCount: notificationCount } = useNotifications(userId);
 
   useEffect(() => {
+    const initUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const id = await getUserIdByEmail(user.email);
+        setUserId(id);
+      }
+    };
+    initUser();
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -227,28 +242,49 @@ export function CalendarScreen() {
       const entries: ScheduleEntry[] = [];
 
       for (const schedule of schedulesData as any[]) {
-        const startTime = new Date(schedule.start_time);
-        const month = startTime.getMonth() + 1;
-        const day = startTime.getDate();
+        // Parse timestamp string directly without timezone conversion
+        // Format: "YYYY-MM-DD HH:MM:SS" or "YYYY-MM-DDTHH:MM:SS"
+        const timeStr = schedule.start_time.replace('T', ' ');
+        const [datePart, timePart] = timeStr.split(' ');
+        const [year, month, day] = datePart.split('-').map(Number);
+        const [hour] = timePart.split(':').map(Number);
+
         const dateStr = `${month}/${day}`;
-        const hour = startTime.getHours();
+
+        console.log("📖 Reading schedule:", {
+          id: schedule.id,
+          start_time: schedule.start_time,
+          parsedHour: hour,
+          dateStr: dateStr,
+        });
 
         // Convert hour to time slot (8:00-9:00 = slot 1, 9:00-10:00 = slot 2, etc.)
         // 1時間目: 8時, 2時間目: 9時, 3時間目: 10時, 4時間目: 11時, 5時間目: 13時, 6時間目: 14時
         let timeSlot = 7; // デフォルトは放課後
-        if (hour >= 8 && hour <= 11) {
-          timeSlot = hour - 7; // 8時=1, 9時=2, 10時=3, 11時=4
-        } else if (hour >= 13 && hour <= 14) {
-          timeSlot = hour - 8; // 13時=5, 14時=6
-        } else if (hour >= 15) {
-          timeSlot = 7; // 15時以降は放課後
+        if (hour === 8) {
+          timeSlot = 1;
+        } else if (hour === 9) {
+          timeSlot = 2;
+        } else if (hour === 10) {
+          timeSlot = 3;
+        } else if (hour === 11) {
+          timeSlot = 4;
+        } else if (hour === 13) {
+          timeSlot = 5;
+        } else if (hour === 14) {
+          timeSlot = 6;
+        } else {
+          timeSlot = 7; // それ以外は放課後
         }
+
+        console.log("➡️ Converted to slot:", timeSlot);
 
         const subjectName = (Array.isArray(schedule.subjects) ? schedule.subjects[0]?.name : schedule.subjects?.name) || "";
         const subsubjectName = (Array.isArray(schedule.subsubjects) ? schedule.subsubjects[0]?.name : schedule.subsubjects?.name) || "";
         const subjectColor = SUBJECT_COLORS[subjectName] || "#7B9FE8";
 
         entries.push({
+          id: schedule.id,
           date: dateStr,
           timeSlot: timeSlot,
           subject: subjectName,
@@ -298,17 +334,64 @@ export function CalendarScreen() {
       }
       const userIdToUse = userId;
 
+      // Check if this is a delete operation
+      if (!entry.course && !entry.memo.trim()) {
+        const existingEntry = getScheduleEntry(selectedCell.date, selectedCell.slot);
+        if (existingEntry?.id) {
+          // Delete using schedule ID
+          const { error } = await supabase
+            .from('schedules')
+            .delete()
+            .eq('id', existingEntry.id);
+
+          if (error) throw error;
+
+          await fetchScheduleEntries(userIdToUse as any);
+          toast.success("スケジュールを削除しました");
+        }
+        return;
+      }
+
       // Parse date string "10/27" to create datetime
       const [month, day] = selectedCell.date.split('/').map(Number);
       const year = new Date().getFullYear();
-      const startTime = new Date(year, month - 1, day, selectedCell.slot + 7, 0, 0); // slot 1 = 8:00
-      const endTime = new Date(year, month - 1, day, selectedCell.slot + 8, 0, 0); // slot 1 = 9:00
 
-      if (!entry.course && !entry.memo.trim()) {
-        // Delete schedule entry
-        await deleteScheduleEntry(selectedCell.date, selectedCell.slot);
-        return;
+      console.log("🔍 Saving schedule:", {
+        selectedSlot: selectedCell.slot,
+        slotType: typeof selectedCell.slot,
+        date: selectedCell.date,
+      });
+
+      // Calculate start hour based on slot
+      // 1時間目: 8時, 2時間目: 9時, 3時間目: 10時, 4時間目: 11時, 5時間目: 13時, 6時間目: 14時, 放課後: 15時
+      let startHour: number;
+      if (selectedCell.slot === 1) {
+        startHour = 8;
+      } else if (selectedCell.slot === 2) {
+        startHour = 9;
+      } else if (selectedCell.slot === 3) {
+        startHour = 10;
+      } else if (selectedCell.slot === 4) {
+        startHour = 11;
+      } else if (selectedCell.slot === 5) {
+        startHour = 13;
+      } else if (selectedCell.slot === 6) {
+        startHour = 14;
+      } else { // slot 7 (放課後)
+        startHour = 15;
       }
+
+      console.log("⏰ Calculated startHour:", startHour);
+
+      // Create timestamp strings without timezone conversion
+      // Format: YYYY-MM-DD HH:MM:SS
+      const startTimeStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')} ${String(startHour).padStart(2, '0')}:00:00`;
+      const endTimeStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')} ${String(startHour + 1).padStart(2, '0')}:00:00`;
+
+      console.log("📅 Times:", {
+        startTime: startTimeStr,
+        endTime: endTimeStr,
+      });
 
       // Find subject_id from course name
       const { data: subsubjects } = await supabase
@@ -324,25 +407,19 @@ export function CalendarScreen() {
         location_id: null,
         title: entry.course || 'メモ',
         description: entry.memo,
-        start_time: startTime.toISOString(),
-        end_time: endTime.toISOString(),
+        start_time: startTimeStr,
+        end_time: endTimeStr,
       };
 
       // Check if schedule already exists for this time slot
-      const { data: existing } = await supabase
-        .from('schedules')
-        .select('id')
-        .eq('user_id', userIdToUse as any)
-        .gte('start_time', startTime.toISOString())
-        .lt('start_time', endTime.toISOString())
-        .single();
+      const existingEntry = getScheduleEntry(selectedCell.date, selectedCell.slot);
 
-      if (existing) {
-        // Update existing schedule
+      if (existingEntry?.id) {
+        // Update existing schedule using its ID
         const { error } = await supabase
           .from('schedules')
           .update(scheduleData)
-          .eq('id', existing.id);
+          .eq('id', existingEntry.id);
 
         if (error) throw error;
       } else {
@@ -360,39 +437,6 @@ export function CalendarScreen() {
     } catch (err: any) {
       console.error("Error saving schedule:", err);
       toast.error("スケジュールの保存中にエラーが発生しました");
-    }
-  };
-
-  const deleteScheduleEntry = async (dateStr: string, timeSlot: number) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    try {
-      // Get numeric user_id by email
-      const userId = await getUserIdByEmail(user.email);
-      if (!userId) return;
-      const userIdToUse = userId;
-
-      const [month, day] = dateStr.split('/').map(Number);
-      const year = new Date().getFullYear();
-      const startTime = new Date(year, month - 1, day, timeSlot + 7, 0, 0);
-      const endTime = new Date(year, month - 1, day, timeSlot + 8, 0, 0);
-
-      const { error } = await supabase
-        .from('schedules')
-        .delete()
-        .eq('user_id', userIdToUse as any)
-        .gte('start_time', startTime.toISOString())
-        .lt('start_time', endTime.toISOString());
-
-      if (error) throw error;
-
-      // Refresh schedule entries
-      await fetchScheduleEntries(userIdToUse as any);
-      toast.success("スケジュールを削除しました");
-    } catch (err: any) {
-      console.error("Error deleting schedule:", err);
-      toast.error("スケジュールの削除中にエラーが発生しました");
     }
   };
 
@@ -701,14 +745,9 @@ export function CalendarScreen() {
               onClick={() => navigate("/notifications")}
               variant="ghost"
               size="sm"
-              className="flex-col h-auto py-2 gap-1 relative"
+              className="flex-col h-auto py-2 gap-1"
             >
-              <div className="relative">
-                <Bell className="h-5 w-5 text-muted-foreground" />
-                <span className="absolute -top-1 -right-1 bg-destructive text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center" style={{ fontWeight: 600 }}>
-                  3
-                </span>
-              </div>
+              <NotificationBadge count={notificationCount} />
               <span className="text-xs text-muted-foreground">通知</span>
             </Button>
             <Button

@@ -207,7 +207,7 @@ export function ScheduleEntryModal({
 
         {/* Footer */}
         <div className="sticky bottom-0 bg-white border-t border-border px-6 py-4 flex gap-3 rounded-b-2xl">
-          {initialData?.course && (
+          {initialData && (initialData.course || initialData.memo) && (
             <Button
               variant="outline"
               onClick={handleDelete}

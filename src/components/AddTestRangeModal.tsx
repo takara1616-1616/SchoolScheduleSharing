@@ -1,145 +1,68 @@
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
+import { Button } from "./ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Input } from "./ui/input";
+import { Textarea } from "./ui/textarea";
+import { Label } from "./ui/label";
+import { Calendar } from "./ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { CalendarIcon } from "lucide-react";
-import { format } from "date-fns";
+import { format, parse } from "date-fns";
 import { ja } from "date-fns/locale";
-import { toast } from "sonner";
-import { supabase } from "../lib/supabaseClient";
-import { Tables } from "../types/supabase";
-import { SUBJECT_COLORS } from "../constants/colors";
 
 interface TestRangeData {
   subject: string;
-  subsubject: string;
-  title: string;
-  description: string;
+  subjectColor: string;
+  course: string;
+  content: string;
   testDate: Date | undefined;
 }
 
 interface AddTestRangeModalProps {
   open: boolean;
   onClose: () => void;
-  onSave: (testRange: Omit<TestRangeData, "testDate"> & { testDate: string }) => void;
-  initialData?: {
-    subject: string;
-    subsubject: string;
-    title: string;
-    description: string;
-    testDate: string;
-  };
+  onSave: (testRange: any) => void;  // Flexible type to work with different parent components
+  initialData?: any;
 }
+
+const subjectOptions = [
+  { value: "国語", color: "#FF9F9F", courses: ["現代の国語", "言語文化", "論理国語", "文学国語", "国語表現", "古典探究"] },
+  { value: "数学", color: "#7B9FE8", courses: ["数学I", "数学II", "数学III", "数学A", "数学B", "数学C"] },
+  { value: "英語", color: "#FFD6A5", courses: ["英語コミュニケーションI", "英語コミュニケーションII", "英語コミュニケーションIII", "論理・表現I", "論理・表現II", "論理・表現III"] },
+  { value: "理科", color: "#A8E8D8", courses: ["物理基礎", "物理", "化学基礎", "化学", "生物基礎", "生物", "地学基礎", "地学"] },
+  { value: "社会", color: "#B8A8E8", courses: ["地理総合", "地理探究", "歴史総合", "日本史探究", "世界史探究", "公共", "倫理", "政治・経済"] },
+  { value: "保健体育", color: "#FFA8C8", courses: ["体育", "保健"] },
+  { value: "芸術", color: "#E8D8A8", courses: ["音楽I", "音楽II", "音楽III", "美術I", "美術II", "美術III", "工芸I", "工芸II", "工芸III", "書道I", "書道II", "書道III"] },
+  { value: "家庭", color: "#D8E8A8", courses: ["家庭基礎", "家庭総合"] },
+  { value: "情報", color: "#A8D8E8", courses: ["情報I", "情報II"] },
+];
 
 export function AddTestRangeModal({ open, onClose, onSave, initialData }: AddTestRangeModalProps) {
   const [subject, setSubject] = useState("");
-  const [subsubject, setSubsubject] = useState("");
-  const [title, setTitle] = useState("");
+  const [subjectColor, setSubjectColor] = useState("");
+  const [course, setCourse] = useState("");
   const [content, setContent] = useState("");
   const [testDate, setTestDate] = useState<Date | undefined>(undefined);
 
-  const [subjects, setSubjects] = useState<Tables<'subjects'>['Row'][]>([]);
-  const [subsubjects, setSubsubjects] = useState<Tables<'subsubjects'>['Row'][]>([]);
-
-  useEffect(() => {
-    const fetchMasterData = async () => {
-      // 教科の取得
-      const { data: subjectsData, error: subjectsError } = await supabase
-        .from('subjects')
-        .select('id, name');
-      if (subjectsError) console.error("Error fetching subjects:", subjectsError);
-      else setSubjects(subjectsData || []);
-
-      // 科目の取得
-      const { data: subsubjectsData, error: subsubjectsError } = await supabase
-        .from('subsubjects')
-        .select('id, subject_id, name');
-      if (subsubjectsError) console.error("Error fetching subsubjects:", subsubjectsError);
-      else setSubsubjects(subsubjectsData || []);
-    };
-
-    fetchMasterData();
-  }, []);
-
-  useEffect(() => {
-    if (open && initialData) {
-      setSubject(initialData.subject);
-      setSubsubject(initialData.subsubject);
-      setTitle(initialData.title);
-      setContent(initialData.description);
-      if (initialData.testDate) {
-        setTestDate(new Date(initialData.testDate));
-      }
-    } else if (open) {
-      setSubject("");
-      setSubsubject("");
-      setTitle("");
-      setContent("");
-      setTestDate(undefined);
-    }
-  }, [open, initialData]);
+  const selectedSubjectData = subjectOptions.find((opt) => opt.value === subject);
+  const availableCourses = selectedSubjectData?.courses || [];
 
   const handleSubjectChange = (value: string) => {
+    const subjectData = subjectOptions.find((opt) => opt.value === value);
     setSubject(value);
-    setSubsubject(""); // 教科が変わったら科目をリセット
+    setSubjectColor(subjectData?.color || "");
+    setCourse(""); // Reset course when subject changes
   };
 
-  const handleSave = async () => {
-    if (!subject || !subsubject || !title || !content || !testDate) {
-      toast.error("すべての項目を入力してください");
-      return;
-    }
-
-    const selectedSubject = subjects.find(s => s.name === subject);
-    const selectedSubsubject = subsubjects.find(ss => ss.name === subsubject);
-
-    if (!selectedSubject || !selectedSubsubject) {
-      toast.error("選択された教科または科目が見つかりません。");
-      return;
-    }
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      toast.error("ユーザーが認証されていません。");
-      return;
-    }
-
-    // Get the user's internal ID from USERS table
-    const { data: userData } = await supabase
-      .from('users')
-      .select('id')
-      .eq('ms_account_id', user.id)
-      .single();
-
-    const newAnnouncement: Tables<'announcements'>['Insert'] = {
-      subject_id: selectedSubject.id,
-      subsubject_id: selectedSubsubject.id,
-      created_by: userData?.id || null,
-      title: title,
-      description: content,
-      type: "test",
-      due_date: testDate.toISOString(),
-      submission_method: "", // テスト範囲には提出方法がないため空
-    };
-
-    const { error } = await supabase.from('announcements').insert(newAnnouncement);
-
-    if (error) {
-      console.error("Error adding test range:", error);
-      toast.error("テスト範囲の登録中にエラーが発生しました。");
-    } else {
-      toast.success("テスト範囲を登録しました。");
+  const handleSave = () => {
+    if (subject && course && content && testDate) {
       onSave({
         subject,
-        subsubject,
-        title,
-        description: content,
-        testDate: testDate.toISOString(),
+        subjectColor,
+        course,
+        content,
+        testDate: format(testDate, "M月d日(E)", { locale: ja }),
       });
       handleClose();
     }
@@ -148,15 +71,41 @@ export function AddTestRangeModal({ open, onClose, onSave, initialData }: AddTes
   const handleClose = () => {
     if (!initialData) {
       setSubject("");
-      setSubsubject("");
-      setTitle("");
+      setSubjectColor("");
+      setCourse("");
       setContent("");
       setTestDate(undefined);
     }
     onClose();
   };
 
-  const filteredSubsubjects = subsubjects.filter(ss => ss.subject_id === subjects.find(s => s.name === subject)?.id);
+  useEffect(() => {
+    if (open && initialData) {
+      setSubject(initialData.subject);
+      setSubjectColor(initialData.subjectColor);
+      setCourse(initialData.course);
+      setContent(initialData.content);
+      
+      // Parse the date string (e.g., "6月12日(土)")
+      try {
+        const dateMatch = initialData.testDate.match(/(\d+)月(\d+)日/);
+        if (dateMatch) {
+          const month = parseInt(dateMatch[1]);
+          const day = parseInt(dateMatch[2]);
+          const year = new Date().getFullYear();
+          setTestDate(new Date(year, month - 1, day));
+        }
+      } catch (error) {
+        console.error("Error parsing date:", error);
+      }
+    } else if (open && !initialData) {
+      setSubject("");
+      setSubjectColor("");
+      setCourse("");
+      setContent("");
+      setTestDate(undefined);
+    }
+  }, [open, initialData]);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -177,14 +126,14 @@ export function AddTestRangeModal({ open, onClose, onSave, initialData }: AddTes
                 <SelectValue placeholder="選択してください" />
               </SelectTrigger>
               <SelectContent>
-                {subjects.map((s) => (
-                  <SelectItem key={s.id} value={s.name}>
+                {subjectOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
                     <div className="flex items-center gap-2">
-                      {/* <div
+                      <div
                         className="w-3 h-3 rounded"
-                        style={{ backgroundColor: SUBJECT_COLORS[s.name] || "#D8D8D8" }}
-                      /> */}
-                      {s.name}
+                        style={{ backgroundColor: option.color }}
+                      />
+                      {option.value}
                     </div>
                   </SelectItem>
                 ))}
@@ -192,32 +141,21 @@ export function AddTestRangeModal({ open, onClose, onSave, initialData }: AddTes
             </Select>
           </div>
 
-          {/* Subsubject Selection */}
+          {/* Course Selection */}
           <div className="space-y-2">
             <Label>科目</Label>
-            <Select value={subsubject} onValueChange={setSubsubject} disabled={!subject}>
+            <Select value={course} onValueChange={setCourse} disabled={!subject}>
               <SelectTrigger className="w-full rounded-lg">
                 <SelectValue placeholder={subject ? "選択してください" : "先に教科を選択してください"} />
               </SelectTrigger>
               <SelectContent>
-                {filteredSubsubjects.map((ss) => (
-                  <SelectItem key={ss.id} value={ss.name}>
-                    {ss.name}
+                {availableCourses.map((courseName) => (
+                  <SelectItem key={courseName} value={courseName}>
+                    {courseName}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          </div>
-
-          {/* Title */}
-          <div className="space-y-2">
-            <Label>タイトル</Label>
-            <Input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="例: 中間試験"
-              className="rounded-lg bg-input-background"
-            />
           </div>
 
           {/* Test Range Content */}
@@ -236,13 +174,12 @@ export function AddTestRangeModal({ open, onClose, onSave, initialData }: AddTes
             <Label>テスト日</Label>
             <Popover>
               <PopoverTrigger asChild>
-                <Button
-                  variant={"outline"}
+                <button
                   className="flex w-full items-center justify-start rounded-lg border border-border bg-input-background px-3 py-2 text-left transition-colors hover:bg-accent hover:text-accent-foreground"
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {testDate ? format(testDate, "yyyy年M月d日(E)", { locale: ja }) : "日付を選択"}
-                </Button>
+                  {testDate ? format(testDate, "M月d日(E)", { locale: ja }) : "日付を選択"}
+                </button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
@@ -264,7 +201,7 @@ export function AddTestRangeModal({ open, onClose, onSave, initialData }: AddTes
           <Button
             onClick={handleSave}
             className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90"
-            disabled={!subject || !subsubject || !title || !content || !testDate}
+            disabled={!subject || !course || !content || !testDate}
           >
             保存
           </Button>

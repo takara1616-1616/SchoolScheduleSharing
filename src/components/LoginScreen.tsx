@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useState } from "react";
 import { Mail } from "lucide-react";
+import { TeacherPasswordModal } from "./TeacherPasswordModal";
 
 // テストユーザーの認証情報
 const TEST_CREDENTIALS = {
@@ -25,6 +26,7 @@ export function LoginScreen() {
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isTeacherPasswordModalOpen, setIsTeacherPasswordModalOpen] = useState(false);
 
   const handleMicrosoftLogin = async () => {
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -190,8 +192,13 @@ export function LoginScreen() {
   };
 
   const handleTeacherLogin = () => {
-    // 先生ログインのロジックをここに実装
-    alert("先生ログインはまだ実装されていません。");
+    setIsTeacherPasswordModalOpen(true);
+  };
+
+  const handleTeacherPasswordSuccess = () => {
+    setIsTeacherPasswordModalOpen(false);
+    toast.success("先生ページにアクセスします");
+    navigate('/teacher');
   };
 
   return (
@@ -307,6 +314,12 @@ export function LoginScreen() {
           利用することで、利用規約とプライバシーポリシーに同意したものとみなされます
         </p>
       </div>
+
+      <TeacherPasswordModal
+        open={isTeacherPasswordModalOpen}
+        onClose={() => setIsTeacherPasswordModalOpen(false)}
+        onSuccess={handleTeacherPasswordSuccess}
+      />
     </div>
   );
 }
