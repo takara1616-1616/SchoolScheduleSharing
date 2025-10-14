@@ -123,12 +123,12 @@ export function AddAssignmentModal({
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (
       !formData.subject ||
       !formData.subsubject ||
       !formData.teacher ||
-      // !formData.title || 
+      // !formData.title ||
       !formData.description ||
       !formData.submission_method ||
       !formData.dueDate
@@ -137,50 +137,27 @@ export function AddAssignmentModal({
       return;
     }
 
-    const selectedSubject = subjects.find(s => s.name === formData.subject);
-    const selectedSubsubject = subsubjects.find(ss => ss.name === formData.subsubject);
-    
-    // 先生の存在チェック（selectedTeacher）は不要のため削除
+    // Generate title from description (first line, max 50 chars)
+    const title = formData.description.trim().split('\n')[0].substring(0, 50);
 
-    if (!selectedSubject || !selectedSubsubject) {
-      toast.error("選択された教科、または科目が見つかりません。");
-      return;
-    }
+    // Pass data to parent component for handling Supabase insertion
+    onSave({
+      ...formData,
+      title, // Include generated title
+    });
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      toast.error("ユーザーが認証されていません。");
-      return;
-    }
+    // Reset form
+    setFormData({
+      subject: "",
+      subsubject: "",
+      teacher: "",
+      description: "",
+      submission_method: "",
+      dueDate: "",
+    });
+    setSelectedDate(undefined);
 
-    // Get the user's internal ID from USERS table
-    const { data: userData } = await supabase
-      .from('users')
-      .select('id')
-      .eq('ms_account_id', user.id)
-      .single();
-
-    const newAnnouncement: Tables<'announcements'>['Insert'] = {
-      subject_id: selectedSubject.id,
-      subsubject_id: selectedSubsubject.id,
-      created_by: userData?.id || null,
-      // title: formData.title,
-      description: formData.description,
-      type: "assignment",
-      due_date: formData.dueDate,
-      submission_method: formData.submission_method,
-    };
-
-    const { error } = await supabase.from('announcements').insert(newAnnouncement);
-
-    if (error) {
-      console.error("Error adding assignment:", error);
-      toast.error("提出物の登録中にエラーが発生しました。");
-    } else {
-      toast.success("提出物を登録しました。");
-      onSave(formData); // 親コンポーネントに保存を通知
-      onClose();
-    }
+    onClose();
   };
 
   if (!open) return null;

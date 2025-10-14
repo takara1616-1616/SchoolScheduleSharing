@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { LoginScreen } from './components/LoginScreen';
 import { AuthCallback } from './AuthCallback';
@@ -8,6 +8,13 @@ import { NotificationScreen } from './components/NotificationScreen';
 import { HistoryScreen } from './components/HistoryScreen';
 import { DetailScreen } from './components/DetailScreen';
 import { AssignmentsScreen } from './components/AssignmentsScreen';
+import { TeacherScreen } from './components/TeacherScreen';
+
+// Teacher Screen wrapper component
+function TeacherScreenWrapper() {
+  const navigate = useNavigate();
+  return <TeacherScreen onBack={() => navigate('/')} />;
+}
 
 function App() {
   return (
@@ -21,6 +28,7 @@ function App() {
         <Route path="/calendar" element={<CalendarScreen />} />
         <Route path="/notifications" element={<NotificationScreen />} />
         <Route path="/history" element={<HistoryScreen />} />
+        <Route path="/teacher" element={<TeacherScreenWrapper />} />
       </Routes>
       <Toaster />
     </BrowserRouter>

@@ -197,6 +197,158 @@ export type Database = {
         };
         Relationships: [];
       };
+      schedules: {
+        Row: {
+          id: number;
+          user_id: number;
+          subject_id: number | null;
+          subsubject_id: number | null;
+          location_id: number | null;
+          title: string;
+          description: string;
+          start_time: string;
+          end_time: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          user_id: number;
+          subject_id?: number | null;
+          subsubject_id?: number | null;
+          location_id?: number | null;
+          title: string;
+          description: string;
+          start_time: string;
+          end_time: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: number;
+          user_id?: number;
+          subject_id?: number | null;
+          subsubject_id?: number | null;
+          location_id?: number | null;
+          title?: string;
+          description?: string;
+          start_time?: string;
+          end_time?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "schedules_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "schedules_subject_id_fkey";
+            columns: ["subject_id"];
+            isOneToOne: false;
+            referencedRelation: "subjects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "schedules_subsubject_id_fkey";
+            columns: ["subsubject_id"];
+            isOneToOne: false;
+            referencedRelation: "subsubjects";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      reminders: {
+        Row: {
+          id: number;
+          announcement_id: number | null;
+          schedule_id: number | null;
+          user_id: number | null;
+          class_id: number | null;
+          remind_at: string;
+        };
+        Insert: {
+          id?: number;
+          announcement_id?: number | null;
+          schedule_id?: number | null;
+          user_id?: number | null;
+          class_id?: number | null;
+          remind_at: string;
+        };
+        Update: {
+          id?: number;
+          announcement_id?: number | null;
+          schedule_id?: number | null;
+          user_id?: number | null;
+          class_id?: number | null;
+          remind_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "reminders_announcement_id_fkey";
+            columns: ["announcement_id"];
+            isOneToOne: false;
+            referencedRelation: "announcements";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "reminders_schedule_id_fkey";
+            columns: ["schedule_id"];
+            isOneToOne: false;
+            referencedRelation: "schedules";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "reminders_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      notification_logs: {
+        Row: {
+          id: number;
+          reminder_id: number | null;
+          user_id: number | null;
+          class_id: number | null;
+          sent_at: string;
+          status: string;
+        };
+        Insert: {
+          id?: number;
+          reminder_id?: number | null;
+          user_id?: number | null;
+          class_id?: number | null;
+          sent_at?: string;
+          status: string;
+        };
+        Update: {
+          id?: number;
+          reminder_id?: number | null;
+          user_id?: number | null;
+          class_id?: number | null;
+          sent_at?: string;
+          status?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "notification_logs_reminder_id_fkey";
+            columns: ["reminder_id"];
+            isOneToOne: false;
+            referencedRelation: "reminders";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "notification_logs_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;

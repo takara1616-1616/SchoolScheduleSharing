@@ -1,4 +1,4 @@
-import { Bell, Edit, Plus, Check, List, Calendar, FileCheck } from "lucide-react";
+import { Edit, Plus, Check, List, Calendar, FileCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -12,8 +12,10 @@ import { AddAssignmentModal } from "./AddAssignmentModal";
 import { EditAssignmentModal } from "./EditAssignmentModal";
 import { AddTestRangeModal } from "./AddTestRangeModal";
 import { EditTestRangeModal } from "./EditTestRangeModal";
-import { AddGeneralNoticeModal } from "./AddGeneralNoticeModal"; 
-import { EditGeneralNoticeModal } from "./EditGeneralNoticeModal"; 
+import { NotificationBadge } from "./NotificationBadge";
+import { useNotifications } from "../hooks/useNotifications";
+import { AddGeneralNoticeModal } from "./AddGeneralNoticeModal";
+import { EditGeneralNoticeModal } from "./EditGeneralNoticeModal";
 
 // 仮の型定義 (FigmaのモックデータとSupabaseのER図を統合)
 interface AssignmentItem {
@@ -77,18 +79,63 @@ export function HomeScreen() {
   const [isEditTestSelectModalOpen, setIsEditTestSelectModalOpen] = useState(false);
   const [isEditTestModalOpen, setIsEditTestModalOpen] = useState(false);
   const [editingTest, setEditingTest] = useState<TestItem | null>(null);
-  
+  const [userId, setUserId] = useState<number | null>(null);
+
+  // Fetch notification count
+  const { totalCount: notificationCount } = useNotifications(userId);
+
   const [isAddGeneralNoticeModalOpen, setIsAddGeneralNoticeModalOpen] = useState(false);
   const [isEditGeneralNoticeSelectModalOpen, setIsEditGeneralNoticeSelectModalOpen] = useState(false);
-  const [editingGeneralNotice, setEditingGeneralNotice] = useState<GeneralNoticeItem | null>(null); 
+  const [editingGeneralNotice, setEditingGeneralNotice] = useState<GeneralNoticeItem | null>(null);
 
   const today = new Date();
   const dateStr = `${today.getMonth() + 1}月${today.getDate()}日`;
   const dayOfWeek = ["日", "月", "火", "水", "木", "金", "土"][today.getDay()];
 
   useEffect(() => {
+    const initUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        navigate('/');
+        return;
+      }
+      const id = await getUserIdByEmail(user.email);
+      setUserId(id);
+    };
+    initUser();
     fetchAnnouncements();
   }, [navigate]);
+
+  // Utility function to get numeric user_id from users table by email
+  const getUserIdByEmail = async (userEmail: string | undefined): Promise<number | null> => {
+    if (!userEmail) {
+      console.error("No email provided");
+      return null;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', userEmail)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error fetching user_id:", error);
+        return null;
+      }
+
+      if (!data) {
+        console.error("User not found in users table for email:", userEmail);
+        return null;
+      }
+
+      return data.id;
+    } catch (err) {
+      console.error("Exception in getUserIdByEmail:", err);
+      return null;
+    }
+  };
 
   const fetchAnnouncements = async () => {
     setLoading(true);
@@ -99,6 +146,13 @@ export function HomeScreen() {
     }
 
     try {
+      // Get numeric user_id from users table by email
+      const userId = await getUserIdByEmail(user.email);
+      if (!userId) {
+        toast.error("ユーザー情報の取得に失敗しました");
+        navigate('/');
+        return;
+      }
       // ANNOUNCEMENTS, SUBJECTS, SUBSUBJECTS, USERS を結合してデータを取得
       const { data, error } = await supabase
         .from('announcements')
@@ -153,12 +207,12 @@ export function HomeScreen() {
         }
 
         if (announcement.type === 'assignment') {
-          // SUBMISSIONSテーブルから現在のユーザーの提出状況を取得
+          // SUBMISSIONSテーブルから現在のユーザーの提出状況を取得（numeric user_idを使用）
           const { data: submissionData, error: submissionError } = await supabase
             .from('submissions')
             .select('status')
             .eq('announcement_id', announcement.id)
-            .eq('user_id', user.id)
+            .eq('user_id', userId)
             .single();
 
           if (submissionError && submissionError.code !== 'PGRST116') { // PGRST116はデータがない場合
@@ -231,10 +285,10 @@ export function HomeScreen() {
         setLoading(false);
         return;
     }
-    
+
     // 課題登録ロジック
-    const subjectId = getSubjectIdByName(assignment.subject); 
-    
+    const subjectId = getSubjectIdByName(assignment.subject);
+
     const { error } = await supabase
         .from('announcements')
         .insert({
@@ -279,38 +333,50 @@ export function HomeScreen() {
         return;
     }
 
-    const newStatus = currentStatus ? 'pending' : 'submitted';
-
-    const { error } = await supabase
-      .from('submissions')
-      // announcement_id と user_id が衝突した場合に更新 (upsert)
-      .upsert({
-        announcement_id: id,
-        user_id: user.id,
-        status: newStatus,
-        submitted_at: newStatus === 'submitted' ? new Date().toISOString() : null,
-        submission_method: 'unknown', // 提出方法を追跡する場合
-      }, { onConflict: 'announcement_id,user_id' });
-
-    if (error) {
-      console.error("Error updating submission status:", error);
-      toast.error("提出状況の更新中にエラーが発生しました。");
-    } else {
-      // フロントエンドのStateを更新
-      setAssignments((prev) =>
-        prev.map((item) => (item.id === id ? { ...item, isCompleted: !currentStatus } : item))
-      );
-      
-      // Figmaのデザインに合わせたトースト通知
-      if (!currentStatus) { // 未提出 -> 提出済みに変更したとき
-          toast.success("提出完了　よくできました👏", {
-            description: subjectTitle,
-          });
-      } else { // 提出済み -> 未提出に戻したとき
-          toast.info("未提出に変更", {
-            description: subjectTitle,
-          });
+    try {
+      // Get numeric user_id by email
+      const userId = await getUserIdByEmail(user.email);
+      if (!userId) {
+        toast.error("ユーザー情報の取得に失敗しました");
+        return;
       }
+
+      const newStatus = currentStatus ? 'pending' : 'submitted';
+
+      // SUBMISSIONSテーブルを更新または挿入（numeric user_idを使用）
+      const { error } = await supabase
+        .from('submissions')
+        .upsert({
+          announcement_id: id,
+          user_id: userId,
+          status: newStatus,
+          submitted_at: newStatus === 'submitted' ? new Date().toISOString() : null,
+          submission_method: 'unknown', // 提出方法を追跡する場合
+        }, { onConflict: 'announcement_id,user_id' });
+
+      if (error) {
+        console.error("Error updating submission status:", error);
+        toast.error("提出状況の更新中にエラーが発生しました。");
+      } else {
+        // フロントエンドのStateを更新
+        setAssignments((prev) =>
+          prev.map((item) => (item.id === id ? { ...item, isCompleted: !currentStatus } : item))
+        );
+
+        // Figmaのデザインに合わせたトースト通知
+        if (!currentStatus) { // 未提出 -> 提出済みに変更したとき
+            toast.success("提出完了　よくできました👏", {
+              description: subjectTitle,
+            });
+        } else { // 提出済み -> 未提出に戻したとき
+            toast.info("未提出に変更", {
+              description: subjectTitle,
+            });
+        }
+      }
+    } catch (err: any) {
+      console.error("Error in handleToggleAssignment:", err);
+      toast.error("提出状況の更新中にエラーが発生しました");
     }
   };
 
@@ -322,7 +388,7 @@ export function HomeScreen() {
   const handleAddTest = async (testRange: { subject: string; subsubject: string; title: string; description: string; testDate: string }) => {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
         toast.error("ユーザーが認証されていません。");
         setLoading(false);
@@ -752,33 +818,28 @@ export function HomeScreen() {
           <List className="h-5 w-5 text-primary" />
           <span className="text-xs text-primary">お知らせ</span>
         </Button>
-        <Button 
-          onClick={() => navigate("calendar")}
-          variant="ghost" 
-          size="sm" 
+        <Button
+          onClick={() => navigate("/calendar")}
+          variant="ghost"
+          size="sm"
           className="flex-col h-auto py-2 gap-1"
         >
           <Calendar className="h-5 w-5 text-muted-foreground" />
           <span className="text-xs text-muted-foreground">スケジュール</span>
         </Button>
-        <Button 
-          onClick={() => navigate("notifications")}
-          variant="ghost" 
-          size="sm" 
-          className="flex-col h-auto py-2 gap-1 relative"
+        <Button
+          onClick={() => navigate("/notifications")}
+          variant="ghost"
+          size="sm"
+          className="flex-col h-auto py-2 gap-1"
         >
-          <div className="relative">
-          <Bell className="h-5 w-5 text-muted-foreground" />
-          <span className="absolute -top-1 -right-1 bg-destructive text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center" style={{ fontWeight: 600 }}>
-            3
-          </span>
-          </div>
+          <NotificationBadge count={notificationCount} />
           <span className="text-xs text-muted-foreground">通知</span>
         </Button>
-        <Button 
-          onClick={() => navigate("history")}
-          variant="ghost" 
-          size="sm" 
+        <Button
+          onClick={() => navigate("/history")}
+          variant="ghost"
+          size="sm"
           className="flex-col h-auto py-2 gap-1"
         >
           <FileCheck className="h-5 w-5 text-muted-foreground" />
