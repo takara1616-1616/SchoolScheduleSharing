@@ -172,7 +172,7 @@ export function HomeScreen() {
           created_at,
           teacher_name,
           subjects ( name ),
-          subsubjects ( name )
+          subsubjects ( name, subjects ( name ) )
         `)
         .order('due_date', { ascending: true })
         .order('created_at', { ascending: false });
@@ -188,8 +188,16 @@ export function HomeScreen() {
       threeDaysLater.setDate(now.getDate() + 3);
 
       for (const announcement of data as any[]) {
-        const subjectName = (Array.isArray(announcement.subjects) ? announcement.subjects[0]?.name : announcement.subjects?.name) || "";
+        // 教科名を取得（announcements.subject_id または subsubjects経由）
+        let subjectName = (Array.isArray(announcement.subjects) ? announcement.subjects[0]?.name : announcement.subjects?.name) || "";
         const subsubjectName = (Array.isArray(announcement.subsubjects) ? announcement.subsubjects[0]?.name : announcement.subsubjects?.name) || "";
+
+        // subjectNameが空で、subsubjectに親のsubjectがある場合はそちらを使用
+        if (!subjectName && announcement.subsubjects) {
+          const subsubjectData = Array.isArray(announcement.subsubjects) ? announcement.subsubjects[0] : announcement.subsubjects;
+          subjectName = subsubjectData?.subjects?.name || "";
+        }
+
         const teacherName = announcement.teacher_name || "";
 
         const displaySubject = subsubjectName ? `${subjectName} (${subsubjectName})` : (announcement.type === 'general_notice' ? "連絡事項" : subjectName);

@@ -99,7 +99,7 @@ export function HistoryScreen() {
           submission_method,
           teacher_name,
           subjects ( name ),
-          subsubjects ( name )
+          subsubjects ( name, subjects ( name ) )
         `)
         .eq('type', 'assignment')
         .order('due_date', { ascending: false }); // Most recent first
@@ -109,12 +109,20 @@ export function HistoryScreen() {
       const fetchedAssignments: Assignment[] = [];
 
       for (const announcement of announcementsData as any[]) {
-        const subjectName = (Array.isArray(announcement.subjects)
+        // 教科名を取得（announcements.subject_id または subsubjects経由）
+        let subjectName = (Array.isArray(announcement.subjects)
           ? announcement.subjects[0]?.name
           : announcement.subjects?.name) || "";
         const subsubjectName = (Array.isArray(announcement.subsubjects)
           ? announcement.subsubjects[0]?.name
           : announcement.subsubjects?.name) || "";
+
+        // subjectNameが空で、subsubjectに親のsubjectがある場合はそちらを使用
+        if (!subjectName && announcement.subsubjects) {
+          const subsubjectData = Array.isArray(announcement.subsubjects) ? announcement.subsubjects[0] : announcement.subsubjects;
+          subjectName = subsubjectData?.subjects?.name || "";
+        }
+
         const teacherName = announcement.teacher_name || "";
         const displaySubject = subsubjectName ? `${subjectName} (${subsubjectName})` : subjectName;
 

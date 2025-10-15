@@ -101,7 +101,7 @@ export function AssignmentsScreen() {
           type,
           due_date,
           subjects ( name ),
-          subsubjects ( name )
+          subsubjects ( name, subjects ( name ) )
         `)
         .in('type', ['assignment', 'test'])
         .order('due_date', { ascending: true });
@@ -134,8 +134,15 @@ export function AssignmentsScreen() {
         }
         const isUrgent = daysUntilDue !== null && daysUntilDue > 0 && daysUntilDue <= 3;
 
-        const subjectName = (Array.isArray(item.subjects) ? (item.subjects as any)[0]?.name : (item.subjects as any)?.name) || "";
+        // 教科名を取得（announcements.subject_id または subsubjects経由）
+        let subjectName = (Array.isArray(item.subjects) ? (item.subjects as any)[0]?.name : (item.subjects as any)?.name) || "";
         const subsubjectName = (Array.isArray(item.subsubjects) ? (item.subsubjects as any)[0]?.name : (item.subsubjects as any)?.name) || "";
+
+        // subjectNameが空で、subsubjectに親のsubjectがある場合はそちらを使用
+        if (!subjectName && item.subsubjects) {
+          const subsubjectData = Array.isArray(item.subsubjects) ? item.subsubjects[0] : item.subsubjects;
+          subjectName = subsubjectData?.subjects?.name || "";
+        }
 
         console.log("AssignmentsScreen - Subject mapping:", {
           subjectName,

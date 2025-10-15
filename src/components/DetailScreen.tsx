@@ -99,7 +99,7 @@ export function DetailScreen() {
           submission_method,
           teacher_name,
           subjects ( name ),
-          subsubjects ( name )
+          subsubjects ( name, subjects ( name ) )
         `)
         .eq('id', announcementId)
         .single();
@@ -130,8 +130,16 @@ export function DetailScreen() {
       }
       const isUrgent = daysUntilDue !== null && daysUntilDue > 0 && daysUntilDue <= 3;
 
-      const subjectName = (Array.isArray(announcementData.subjects) ? (announcementData.subjects as any)[0]?.name : (announcementData.subjects as any)?.name) || "";
+      // 教科名を取得（announcements.subject_id または subsubjects経由）
+      let subjectName = (Array.isArray(announcementData.subjects) ? (announcementData.subjects as any)[0]?.name : (announcementData.subjects as any)?.name) || "";
       const subsubjectName = (Array.isArray(announcementData.subsubjects) ? (announcementData.subsubjects as any)[0]?.name : (announcementData.subsubjects as any)?.name) || "";
+
+      // subjectNameが空で、subsubjectに親のsubjectがある場合はそちらを使用
+      if (!subjectName && announcementData.subsubjects) {
+        const subsubjectData = Array.isArray(announcementData.subsubjects) ? (announcementData.subsubjects as any)[0] : announcementData.subsubjects;
+        subjectName = subsubjectData?.subjects?.name || "";
+      }
+
       const teacherName = announcementData.teacher_name || "";
 
       console.log("DetailScreen - Subject mapping:", {

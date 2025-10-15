@@ -148,9 +148,9 @@ export function CalendarScreen() {
           type,
           due_date,
           submission_method,
+          teacher_name,
           subjects ( name ),
-          subsubjects ( name ),
-          users!announcements_created_by_fkey ( name )
+          subsubjects ( name, subjects ( name ) )
         `)
         .eq('type', 'assignment')
         .order('due_date', { ascending: true });
@@ -160,9 +160,17 @@ export function CalendarScreen() {
       const fetchedAssignments: Assignment[] = [];
 
       for (const announcement of announcementsData as any[]) {
-        const subjectName = (Array.isArray(announcement.subjects) ? announcement.subjects[0]?.name : announcement.subjects?.name) || "";
+        // 教科名を取得（announcements.subject_id または subsubjects経由）
+        let subjectName = (Array.isArray(announcement.subjects) ? announcement.subjects[0]?.name : announcement.subjects?.name) || "";
         const subsubjectName = (Array.isArray(announcement.subsubjects) ? announcement.subsubjects[0]?.name : announcement.subsubjects?.name) || "";
-        const teacherName = (Array.isArray(announcement.users) ? announcement.users[0]?.name : announcement.users?.name) || "";
+
+        // subjectNameが空で、subsubjectに親のsubjectがある場合はそちらを使用
+        if (!subjectName && announcement.subsubjects) {
+          const subsubjectData = Array.isArray(announcement.subsubjects) ? announcement.subsubjects[0] : announcement.subsubjects;
+          subjectName = subsubjectData?.subjects?.name || "";
+        }
+
+        const teacherName = announcement.teacher_name || "";
         const displaySubject = subsubjectName ? `${subjectName} (${subsubjectName})` : subjectName;
         const subjectColor = SUBJECT_COLORS[subjectName] || "#7B9FE8";
 
