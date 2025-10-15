@@ -4,7 +4,6 @@ import { LoginScreen } from './components/LoginScreen';
 import { AuthCallback } from './AuthCallback';
 import { HomeScreen } from './components/HomeScreen';
 import { CalendarScreen } from './components/CalendarScreen';
-import { NotificationScreen } from './components/NotificationScreen';
 import { HistoryScreen } from './components/HistoryScreen';
 import { DetailScreen } from './components/DetailScreen';
 import { AssignmentsScreen } from './components/AssignmentsScreen';
@@ -26,7 +25,6 @@ function App() {
         <Route path="/detail/:id" element={<DetailScreen />} />
         <Route path="/assignments" element={<AssignmentsScreen />} />
         <Route path="/calendar" element={<CalendarScreen />} />
-        <Route path="/notifications" element={<NotificationScreen />} />
         <Route path="/history" element={<HistoryScreen />} />
         <Route path="/teacher" element={<TeacherScreenWrapper />} />
       </Routes>

@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SUBJECT_COLORS } from "@/constants/colors";
 
 interface ScheduleEntry {
   subject: string; // 教科
@@ -30,70 +31,70 @@ interface ScheduleEntryModalProps {
 // 科目リスト（教科別に色分け）
 const courses = [
   // 国語
-  { name: "現代の国語", color: "#FF9F9F", category: "国語" },
-  { name: "言語文化", color: "#FF9F9F", category: "国語" },
-  { name: "論理国語", color: "#FF9F9F", category: "国語" },
-  { name: "文学国語", color: "#FF9F9F", category: "国語" },
-  { name: "国語表現", color: "#FF9F9F", category: "国語" },
-  { name: "古典探究", color: "#FF9F9F", category: "国語" },
+  { name: "現代の国語", category: "国語" },
+  { name: "言語文化", category: "国語" },
+  { name: "論理国語", category: "国語" },
+  { name: "文学国語", category: "国語" },
+  { name: "国語表現", category: "国語" },
+  { name: "古典探究", category: "国語" },
   // 数学
-  { name: "数学I", color: "#7B9FE8", category: "数学" },
-  { name: "数学II", color: "#7B9FE8", category: "数学" },
-  { name: "数学III", color: "#7B9FE8", category: "数学" },
-  { name: "数学A", color: "#7B9FE8", category: "数学" },
-  { name: "数学B", color: "#7B9FE8", category: "数学" },
-  { name: "数学C", color: "#7B9FE8", category: "数学" },
+  { name: "数学I", category: "数学" },
+  { name: "数学II", category: "数学" },
+  { name: "数学III", category: "数学" },
+  { name: "数学A", category: "数学" },
+  { name: "数学B", category: "数学" },
+  { name: "数学C", category: "数学" },
   // 英語
-  { name: "英語コミュニケーションI", color: "#FFD6A5", category: "英語" },
-  { name: "英語コミュニケーションII", color: "#FFD6A5", category: "英語" },
-  { name: "英語コミュニケーションIII", color: "#FFD6A5", category: "英語" },
-  { name: "論理・表現I", color: "#FFD6A5", category: "英語" },
-  { name: "論理・表現II", color: "#FFD6A5", category: "英語" },
-  { name: "論理・表現III", color: "#FFD6A5", category: "英語" },
+  { name: "英語コミュニケーションI", category: "英語" },
+  { name: "英語コミュニケーションII", category: "英語" },
+  { name: "英語コミュニケーションIII", category: "英語" },
+  { name: "論理・表現I", category: "英語" },
+  { name: "論理・表現II", category: "英語" },
+  { name: "論理・表現III", category: "英語" },
   // 理科
-  { name: "物理基礎", color: "#A8E8D8", category: "理科" },
-  { name: "物理", color: "#A8E8D8", category: "理科" },
-  { name: "化学基礎", color: "#A8E8D8", category: "理科" },
-  { name: "化学", color: "#A8E8D8", category: "理科" },
-  { name: "生物基礎", color: "#A8E8D8", category: "理科" },
-  { name: "生物", color: "#A8E8D8", category: "理科" },
-  { name: "地学基礎", color: "#A8E8D8", category: "理科" },
-  { name: "地学", color: "#A8E8D8", category: "理科" },
+  { name: "物理基礎", category: "理科" },
+  { name: "物理", category: "理科" },
+  { name: "化学基礎", category: "理科" },
+  { name: "化学", category: "理科" },
+  { name: "生物基礎", category: "理科" },
+  { name: "生物", category: "理科" },
+  { name: "地学基礎", category: "理科" },
+  { name: "地学", category: "理科" },
   // 社会
-  { name: "地理総合", color: "#B8A8E8", category: "社会" },
-  { name: "地理探究", color: "#B8A8E8", category: "社会" },
-  { name: "歴史総合", color: "#B8A8E8", category: "社会" },
-  { name: "日本史探究", color: "#B8A8E8", category: "社会" },
-  { name: "世界史探究", color: "#B8A8E8", category: "社会" },
-  { name: "公共", color: "#B8A8E8", category: "社会" },
-  { name: "倫理", color: "#B8A8E8", category: "社会" },
-  { name: "政治・経済", color: "#B8A8E8", category: "社会" },
+  { name: "地理総合", category: "社会" },
+  { name: "地理探究", category: "社会" },
+  { name: "歴史総合", category: "社会" },
+  { name: "日本史探究", category: "社会" },
+  { name: "世界史探究", category: "社会" },
+  { name: "公共", category: "社会" },
+  { name: "倫理", category: "社会" },
+  { name: "政治・経済", category: "社会" },
   // 保健体育
-  { name: "体育", color: "#FFA8C8", category: "保健体育" },
-  { name: "保健", color: "#FFA8C8", category: "保健体育" },
+  { name: "体育", category: "保健体育" },
+  { name: "保健", category: "保健体育" },
   // 芸術
-  { name: "音楽I", color: "#FFB8E8", category: "芸術" },
-  { name: "音楽II", color: "#FFB8E8", category: "芸術" },
-  { name: "音楽III", color: "#FFB8E8", category: "芸術" },
-  { name: "美術I", color: "#FFB8E8", category: "芸術" },
-  { name: "美術II", color: "#FFB8E8", category: "芸術" },
-  { name: "美術III", color: "#FFB8E8", category: "芸術" },
-  { name: "工芸I", color: "#FFB8E8", category: "芸術" },
-  { name: "工芸II", color: "#FFB8E8", category: "芸術" },
-  { name: "工芸III", color: "#FFB8E8", category: "芸術" },
-  { name: "書道I", color: "#FFB8E8", category: "芸術" },
-  { name: "書道II", color: "#FFB8E8", category: "芸術" },
-  { name: "書道III", color: "#FFB8E8", category: "芸術" },
+  { name: "音楽I", category: "芸術" },
+  { name: "音楽II", category: "芸術" },
+  { name: "音楽III", category: "芸術" },
+  { name: "美術I", category: "芸術" },
+  { name: "美術II", category: "芸術" },
+  { name: "美術III", category: "芸術" },
+  { name: "工芸I", category: "芸術" },
+  { name: "工芸II", category: "芸術" },
+  { name: "工芸III", category: "芸術" },
+  { name: "書道I", category: "芸術" },
+  { name: "書道II", category: "芸術" },
+  { name: "書道III", category: "芸術" },
   // 家庭
-  { name: "家庭基礎", color: "#FFE8A8", category: "家庭" },
-  { name: "家庭総合", color: "#FFE8A8", category: "家庭" },
+  { name: "家庭基礎", category: "家庭" },
+  { name: "家庭総合", category: "家庭" },
   // 情報
-  { name: "情報I", color: "#C8D8FF", category: "情報" },
-  { name: "情報II", color: "#C8D8FF", category: "情報" },
+  { name: "情報I", category: "情報" },
+  { name: "情報II", category: "情報" },
   // その他
-  { name: "総合的な探究の時間", color: "#D8D8D8", category: "その他" },
-  { name: "LHR", color: "#D8D8D8", category: "その他" },
-  { name: "特別活動", color: "#D8D8D8", category: "その他" },
+  { name: "総合的な探究の時間", category: "その他" },
+  { name: "LHR", category: "その他" },
+  { name: "特別活動", category: "その他" },
 ];
 
 export function ScheduleEntryModal({
@@ -119,10 +120,11 @@ export function ScheduleEntryModal({
     if (!course && !memo.trim()) return;
 
     const selectedCourse = courses.find((c) => c.name === course);
+    const category = selectedCourse?.category || "";
     onSave({
-      subject: selectedCourse?.category || "",
+      subject: category,
       course: course || "",
-      subjectColor: selectedCourse?.color || "",
+      subjectColor: SUBJECT_COLORS[category] || "#7B9FE8",
       memo,
     });
     onClose();
@@ -183,7 +185,7 @@ export function ScheduleEntryModal({
                     <div className="flex items-center gap-2">
                       <div
                         className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: courseItem.color }}
+                        style={{ backgroundColor: SUBJECT_COLORS[courseItem.category] || "#7B9FE8" }}
                       />
                       {courseItem.name}
                     </div>

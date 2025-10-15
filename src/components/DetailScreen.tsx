@@ -7,6 +7,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 import { ReminderModal } from "./ReminderModal";
+import { SUBJECT_COLORS } from "@/constants/colors";
 
 interface AnnouncementDetail {
   id: number;
@@ -38,6 +39,37 @@ export function DetailScreen() {
     }
   }, [id]);
 
+  // Utility function to get numeric user_id from users table by email
+  const getUserIdByEmail = async (userEmail: string | undefined): Promise<number | null> => {
+    if (!userEmail) {
+      console.error("No email provided");
+      return null;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', userEmail)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error fetching user_id:", error);
+        return null;
+      }
+
+      if (!data) {
+        console.error("User not found in users table for email:", userEmail);
+        return null;
+      }
+
+      return data.id;
+    } catch (err) {
+      console.error("Exception in getUserIdByEmail:", err);
+      return null;
+    }
+  };
+
   const fetchAnnouncementDetail = async (announcementId: number) => {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
@@ -47,6 +79,14 @@ export function DetailScreen() {
     }
 
     try {
+      // Get numeric user_id from users table by email
+      const userId = await getUserIdByEmail(user.email);
+      if (!userId) {
+        toast.error("ユーザー情報の取得に失敗しました");
+        navigate('/');
+        return;
+      }
+
       // ANNOUNCEMENTSテーブルから詳細データを取得
       const { data: announcementData, error: announcementError } = await supabase
         .from('announcements')
@@ -57,9 +97,9 @@ export function DetailScreen() {
           type,
           due_date,
           submission_method,
+          teacher_name,
           subjects ( name ),
-          subsubjects ( name ),
-          users!announcements_created_by_fkey ( name )
+          subsubjects ( name )
         `)
         .eq('id', announcementId)
         .single();
@@ -71,7 +111,7 @@ export function DetailScreen() {
         .from('submissions')
         .select('status')
         .eq('announcement_id', announcementId)
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .single();
 
       if (submissionError && submissionError.code !== 'PGRST116') {
@@ -92,20 +132,13 @@ export function DetailScreen() {
 
       const subjectName = (Array.isArray(announcementData.subjects) ? (announcementData.subjects as any)[0]?.name : (announcementData.subjects as any)?.name) || "";
       const subsubjectName = (Array.isArray(announcementData.subsubjects) ? (announcementData.subsubjects as any)[0]?.name : (announcementData.subsubjects as any)?.name) || "";
-      const teacherName = (Array.isArray(announcementData.users) ? (announcementData.users as any)[0]?.name : (announcementData.users as any)?.name) || "";
+      const teacherName = announcementData.teacher_name || "";
 
-      // 科目の色を取得(仮の色マッピング)
-      const subjectColors: { [key: string]: string } = {
-        "国語": "#FF9F9F",
-        "数学": "#7B9FE8",
-        "英語": "#FFD6A5",
-        "理科": "#A8E8D8",
-        "社会": "#B8A8E8",
-        "保健体育": "#FFA8C8",
-        "芸術": "#FFB8E8",
-        "家庭": "#FFE8A8",
-        "情報": "#C8D8FF",
-      };
+      console.log("DetailScreen - Subject mapping:", {
+        subjectName,
+        hasColor: !!SUBJECT_COLORS[subjectName],
+        color: SUBJECT_COLORS[subjectName]
+      });
 
       setAnnouncement({
         id: announcementData.id,
@@ -115,7 +148,7 @@ export function DetailScreen() {
         due_date: announcementData.due_date || "",
         submission_method: announcementData.submission_method,
         subject: subjectName,
-        subjectColor: subjectColors[subjectName] || "#7B9FE8",
+        subjectColor: SUBJECT_COLORS[subjectName] || SUBJECT_COLORS["その他"] || "#7B9FE8",
         subsubject: subsubjectName,
         teacher: teacherName,
         isCompleted: submissionData?.status === 'submitted',
@@ -137,24 +170,36 @@ export function DetailScreen() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const newStatus = announcement.isCompleted ? 'pending' : 'submitted';
+    try {
+      // Get numeric user_id from users table by email
+      const userId = await getUserIdByEmail(user.email);
+      if (!userId) {
+        toast.error("ユーザー情報の取得に失敗しました");
+        return;
+      }
 
-    const { error } = await supabase
-      .from('submissions')
-      .upsert({
-        announcement_id: announcement.id,
-        user_id: user.id,
-        status: newStatus,
-        submitted_at: newStatus === 'submitted' ? new Date().toISOString() : null,
-        submission_method: 'unknown',
-      }, { onConflict: 'announcement_id,user_id' });
+      const newStatus = announcement.isCompleted ? 'pending' : 'submitted';
 
-    if (error) {
-      console.error("Error updating submission status:", error);
-      toast.error("提出状況の更新に失敗しました");
-    } else {
-      setAnnouncement(prev => prev ? { ...prev, isCompleted: !prev.isCompleted } : null);
-      toast.success(newStatus === 'submitted' ? "完了にしました" : "未完了に変更しました");
+      const { error } = await supabase
+        .from('submissions')
+        .upsert({
+          announcement_id: announcement.id,
+          user_id: userId,
+          status: newStatus,
+          submitted_at: newStatus === 'submitted' ? new Date().toISOString() : null,
+          submission_method: 'unknown',
+        }, { onConflict: 'announcement_id,user_id' });
+
+      if (error) {
+        console.error("Error updating submission status:", error);
+        toast.error("提出状況の更新に失敗しました");
+      } else {
+        setAnnouncement(prev => prev ? { ...prev, isCompleted: !prev.isCompleted } : null);
+        toast.success(newStatus === 'submitted' ? "完了にしました" : "未完了に変更しました");
+      }
+    } catch (err) {
+      console.error("Error in handleToggleComplete:", err);
+      toast.error("エラーが発生しました");
     }
   };
 

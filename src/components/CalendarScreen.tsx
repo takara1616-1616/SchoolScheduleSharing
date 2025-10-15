@@ -8,8 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { toast } from "sonner";
 import { SUBJECT_COLORS } from "../constants/colors";
-import { NotificationBadge } from "./NotificationBadge";
-import { useNotifications } from "../hooks/useNotifications";
+import { useReminderNotifications } from "../hooks/useReminderNotifications";
 
 interface Assignment {
   id: number;
@@ -73,8 +72,8 @@ export function CalendarScreen() {
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<number | null>(null);
 
-  // Fetch notification count
-  const { totalCount: notificationCount } = useNotifications(userId);
+  // Enable reminder notifications
+  useReminderNotifications(userId);
 
   useEffect(() => {
     const initUser = async () => {
@@ -763,7 +762,7 @@ export function CalendarScreen() {
       {/* Bottom Navigation */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-border">
         <div className="max-w-4xl mx-auto px-4 py-2">
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <Button
               onClick={() => navigate("/home")}
               variant="ghost"
@@ -780,15 +779,6 @@ export function CalendarScreen() {
             >
               <CalendarIcon className="h-5 w-5 text-primary" />
               <span className="text-xs text-primary">スケジュール</span>
-            </Button>
-            <Button
-              onClick={() => navigate("/notifications")}
-              variant="ghost"
-              size="sm"
-              className="flex-col h-auto py-2 gap-1"
-            >
-              <NotificationBadge count={notificationCount} />
-              <span className="text-xs text-muted-foreground">通知</span>
             </Button>
             <Button
               onClick={() => navigate("/history")}

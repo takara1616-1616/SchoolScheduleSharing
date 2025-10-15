@@ -7,8 +7,6 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { SUBJECT_COLORS } from "../constants/colors";
 import { toast } from "sonner";
-import { NotificationBadge } from "./NotificationBadge";
-import { useNotifications } from "../hooks/useNotifications";
 
 interface Assignment {
   id: number;
@@ -62,9 +60,6 @@ export function HistoryScreen() {
   const [filter, setFilter] = useState<"all" | "submitted" | "unsubmitted">("all");
   const [userId, setUserId] = useState<number | null>(null);
 
-  // Fetch notification count
-  const { totalCount: notificationCount } = useNotifications(userId);
-
   const today = new Date();
   const dateStr = `${today.getMonth() + 1}月${today.getDate()}日`;
   const dayOfWeek = ["日", "月", "火", "水", "木", "金", "土"][today.getDay()];
@@ -91,7 +86,7 @@ export function HistoryScreen() {
       }
       setUserId(userIdValue);
 
-      // Fetch all past announcements (assignments only, not tests)
+      // Fetch all assignments (assignments only, not tests)
       const now = new Date();
       const { data: announcementsData, error: announcementsError } = await supabase
         .from('announcements')
@@ -102,12 +97,11 @@ export function HistoryScreen() {
           type,
           due_date,
           submission_method,
+          teacher_name,
           subjects ( name ),
-          subsubjects ( name ),
-          users!announcements_created_by_fkey ( name )
+          subsubjects ( name )
         `)
         .eq('type', 'assignment')
-        .lt('due_date', now.toISOString()) // Only past assignments
         .order('due_date', { ascending: false }); // Most recent first
 
       if (announcementsError) throw announcementsError;
@@ -121,11 +115,16 @@ export function HistoryScreen() {
         const subsubjectName = (Array.isArray(announcement.subsubjects)
           ? announcement.subsubjects[0]?.name
           : announcement.subsubjects?.name) || "";
-        const teacherName = (Array.isArray(announcement.users)
-          ? announcement.users[0]?.name
-          : announcement.users?.name) || "";
+        const teacherName = announcement.teacher_name || "";
         const displaySubject = subsubjectName ? `${subjectName} (${subsubjectName})` : subjectName;
-        const subjectColor = SUBJECT_COLORS[subjectName] || "#7B9FE8";
+
+        console.log("HistoryScreen - Subject mapping:", {
+          subjectName,
+          hasColor: !!SUBJECT_COLORS[subjectName],
+          color: SUBJECT_COLORS[subjectName]
+        });
+
+        const subjectColor = SUBJECT_COLORS[subjectName] || SUBJECT_COLORS["その他"] || "#7B9FE8";
 
         // ISO形式の日付をローカル時刻として解釈（タイムゾーンのずれを防ぐ）
         const dateStr = announcement.due_date.split('T')[0]; // "2025-01-15"
@@ -157,19 +156,23 @@ export function HistoryScreen() {
             })
           : undefined;
 
-        fetchedAssignments.push({
-          id: announcement.id,
-          subject: displaySubject,
-          subjectColor: subjectColor,
-          title: announcement.title,
-          teacher: teacherName,
-          description: announcement.description,
-          deadline: deadlineFormatted,
-          deadlineDate: deadlineDate,
-          isSubmitted: isSubmitted,
-          submittedDate: submittedDate,
-          submission_method: announcement.submission_method,
-        });
+        // 提出履歴に表示するのは: 提出済み、または期限が過ぎたもの
+        const isPastDeadline = deadlineDate < now;
+        if (isSubmitted || isPastDeadline) {
+          fetchedAssignments.push({
+            id: announcement.id,
+            subject: displaySubject,
+            subjectColor: subjectColor,
+            title: announcement.title,
+            teacher: teacherName,
+            description: announcement.description,
+            deadline: deadlineFormatted,
+            deadlineDate: deadlineDate,
+            isSubmitted: isSubmitted,
+            submittedDate: submittedDate,
+            submission_method: announcement.submission_method,
+          });
+        }
       }
 
       setAssignments(fetchedAssignments);
@@ -297,7 +300,7 @@ export function HistoryScreen() {
                         </div>
                       </div>
 
-                      {/* Middle: Subject, Title, Teacher */}
+                      {/* Middle: Subject, Description, Teacher */}
                       <div className="flex items-center gap-2 min-w-0 flex-wrap">
                         <span
                           className="text-sm px-2.5 py-1 rounded-lg text-white whitespace-nowrap shrink-0"
@@ -306,7 +309,7 @@ export function HistoryScreen() {
                           {assignment.subject}
                         </span>
                         <span className="text-base break-words" style={{ fontWeight: 500 }}>
-                          {assignment.title}
+                          {assignment.description}
                         </span>
                         {assignment.teacher && (
                           <span className="text-base text-muted-foreground whitespace-nowrap">
@@ -314,11 +317,6 @@ export function HistoryScreen() {
                           </span>
                         )}
                       </div>
-
-                      {/* Content */}
-                      <p className="text-base text-foreground break-words" style={{ fontWeight: 500 }}>
-                        {assignment.description}
-                      </p>
 
                       {/* Submission Method */}
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -357,7 +355,7 @@ export function HistoryScreen() {
       {/* Bottom Navigation */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-border">
         <div className="max-w-4xl mx-auto px-4 py-2">
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <Button
               onClick={() => navigate("/home")}
               variant="ghost"
@@ -375,15 +373,6 @@ export function HistoryScreen() {
             >
               <Calendar className="h-5 w-5 text-muted-foreground" />
               <span className="text-xs text-muted-foreground">スケジュール</span>
-            </Button>
-            <Button
-              onClick={() => navigate("/notifications")}
-              variant="ghost"
-              size="sm"
-              className="flex-col h-auto py-2 gap-1"
-            >
-              <NotificationBadge count={notificationCount} />
-              <span className="text-xs text-muted-foreground">通知</span>
             </Button>
             <Button variant="ghost" size="sm" className="flex-col h-auto py-2 gap-1">
               <FileCheck className="h-5 w-5 text-primary" />

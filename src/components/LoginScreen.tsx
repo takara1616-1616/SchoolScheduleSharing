@@ -8,18 +8,6 @@ import { useState } from "react";
 import { Mail } from "lucide-react";
 import { TeacherPasswordModal } from "./TeacherPasswordModal";
 
-// テストユーザーの認証情報
-const TEST_CREDENTIALS = {
-  student: {
-    email: 'test-student@example.com',
-    password: 'test1234',
-  },
-  teacher: {
-    email: 'test-teacher@example.com',
-    password: 'test1234',
-  },
-};
-
 export function LoginScreen() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
@@ -40,33 +28,6 @@ export function LoginScreen() {
     if (error) {
       console.error("Error signing in with Microsoft:", error);
       alert("Microsoftでのサインイン中にエラーが発生しました。");
-    }
-  };
-
-  const handleTestLogin = async (role: 'student' | 'teacher') => {
-    const credentials = TEST_CREDENTIALS[role];
-
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: credentials.email,
-        password: credentials.password,
-      });
-
-      if (error) throw error;
-
-      // Ensure user exists in users table
-      if (data.user) {
-        await ensureUserInUsersTable(
-          data.user.email,
-          data.user.user_metadata?.name || data.user.user_metadata?.full_name
-        );
-      }
-
-      toast.success(`テストユーザー（${role === 'student' ? '生徒' : '教師'}）としてログインしました`);
-      navigate('/home');
-    } catch (error: any) {
-      console.error("Error signing in with test account:", error);
-      toast.error("テストログインに失敗しました。Supabaseにテストユーザーを作成してください。");
     }
   };
 
@@ -273,34 +234,6 @@ export function LoginScreen() {
               {isSignUp ? "すでにアカウントをお持ちの方はこちら" : "新規アカウント作成はこちら"}
             </button>
           </div>
-
-          {/* 開発モード用テストログイン */}
-          {import.meta.env.DEV && (
-            <div className="space-y-3 pt-4 border-t border-border">
-              <p className="text-xs text-center text-muted-foreground">
-                🔧 開発モード用テストログイン
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <Button
-                  onClick={() => handleTestLogin('student')}
-                  variant="outline"
-                  className="w-full h-10 rounded-xl text-sm"
-                >
-                  👨‍🎓 生徒
-                </Button>
-                <Button
-                  onClick={() => handleTestLogin('teacher')}
-                  variant="outline"
-                  className="w-full h-10 rounded-xl text-sm"
-                >
-                  👨‍🏫 教師
-                </Button>
-              </div>
-              <p className="text-xs text-center text-muted-foreground">
-                test-student@example.com / test-teacher@example.com
-              </p>
-            </div>
-          )}
         </div>
 
         <button

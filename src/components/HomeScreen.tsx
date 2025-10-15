@@ -12,8 +12,7 @@ import { AddAssignmentModal } from "./AddAssignmentModal";
 import { EditAssignmentModal } from "./EditAssignmentModal";
 import { AddTestRangeModal } from "./AddTestRangeModal";
 import { EditTestRangeModal } from "./EditTestRangeModal";
-import { NotificationBadge } from "./NotificationBadge";
-import { useNotifications } from "../hooks/useNotifications";
+import { useReminderNotifications } from "../hooks/useReminderNotifications";
 import { AddGeneralNoticeModal } from "./AddGeneralNoticeModal";
 import { EditGeneralNoticeModal } from "./EditGeneralNoticeModal";
 
@@ -26,6 +25,7 @@ interface AssignmentItem {
   description: string;
   deadline: string;  // 表示用: "1月15日(水)"
   isUrgent?: boolean;
+  isOverdue?: boolean;  // 期限超過フラグ
   isCompleted: boolean;
   submission_method: string;
   // 編集用の元データ
@@ -87,8 +87,8 @@ export function HomeScreen() {
   const [editingTest, setEditingTest] = useState<TestItem | null>(null);
   const [userId, setUserId] = useState<number | null>(null);
 
-  // Fetch notification count
-  const { totalCount: notificationCount } = useNotifications(userId);
+  // Enable reminder notifications
+  useReminderNotifications(userId);
 
   const [isAddGeneralNoticeModalOpen, setIsAddGeneralNoticeModalOpen] = useState(false);
   const [isEditGeneralNoticeSelectModalOpen, setIsEditGeneralNoticeSelectModalOpen] = useState(false);
@@ -159,7 +159,7 @@ export function HomeScreen() {
         navigate('/');
         return;
       }
-      // ANNOUNCEMENTS, SUBJECTS, SUBSUBJECTS, USERS を結合してデータを取得
+      // ANNOUNCEMENTS, SUBJECTS, SUBSUBJECTS を結合してデータを取得
       const { data, error } = await supabase
         .from('announcements')
         .select(`
@@ -170,9 +170,9 @@ export function HomeScreen() {
           due_date,
           submission_method,
           created_at,
+          teacher_name,
           subjects ( name ),
-          subsubjects ( name ),
-          users!announcements_created_by_fkey ( name )
+          subsubjects ( name )
         `)
         .order('due_date', { ascending: true })
         .order('created_at', { ascending: false });
@@ -190,12 +190,24 @@ export function HomeScreen() {
       for (const announcement of data as any[]) {
         const subjectName = (Array.isArray(announcement.subjects) ? announcement.subjects[0]?.name : announcement.subjects?.name) || "";
         const subsubjectName = (Array.isArray(announcement.subsubjects) ? announcement.subsubjects[0]?.name : announcement.subsubjects?.name) || "";
-        const teacherName = (Array.isArray(announcement.users) ? announcement.users[0]?.name : announcement.users?.name) || "";
-        
+        const teacherName = announcement.teacher_name || "";
+
         const displaySubject = subsubjectName ? `${subjectName} (${subsubjectName})` : (announcement.type === 'general_notice' ? "連絡事項" : subjectName);
-        const subjectColor = SUBJECT_COLORS[subjectName] || (announcement.type === 'general_notice' ? "#7B9FE8" : "#7B9FE8"); 
+
+        // デバッグ: 教科名と色のマッピングを確認
+        console.log("Subject mapping:", {
+          subjectName,
+          hasColor: !!SUBJECT_COLORS[subjectName],
+          color: SUBJECT_COLORS[subjectName],
+          type: announcement.type
+        });
+
+        const subjectColor = announcement.type === 'general_notice'
+          ? "#7B9FE8"
+          : (SUBJECT_COLORS[subjectName] || SUBJECT_COLORS["その他"] || "#7B9FE8"); 
 
         let isUrgent = false;
+        let isOverdue = false;
         let deadlineFormatted = "";
         let dateFormatted = "";
 
@@ -205,7 +217,18 @@ export function HomeScreen() {
           const [year, month, day] = dateStr.split('-').map(Number);
           const dueDate = new Date(year, month - 1, day);
           deadlineFormatted = dueDate.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
-          if (dueDate > now && dueDate <= threeDaysLater) {
+
+          // 今日の日付（時刻を0時に設定して日付のみで比較）
+          const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const dueDateOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+
+          // 期限が過ぎているか、3日以内の場合に強調表示
+          if (dueDateOnly < today) {
+            // 締切日を過ぎている（昨日以前）
+            isUrgent = true;
+            isOverdue = true;
+          } else if (dueDateOnly <= threeDaysLater) {
+            // 締切日当日または3日以内
             isUrgent = true;
           }
         }
@@ -239,6 +262,7 @@ export function HomeScreen() {
             description: announcement.description,
             deadline: deadlineFormatted,
             isUrgent: isUrgent,
+            isOverdue: isOverdue,
             isCompleted: submissionData?.status === 'submitted', // statusが'submitted'なら完了
             submission_method: announcement.submission_method,
             // 編集用の元データ
@@ -355,6 +379,7 @@ export function HomeScreen() {
               subject_id: subjectData?.id || null,
               subsubject_id: subsubjectData?.id || null,
               created_by: numericUserId,
+              teacher_name: assignment.teacher || null,
           });
 
       if (error) {
@@ -427,6 +452,7 @@ export function HomeScreen() {
           submission_method: assignment.submission_method,
           subject_id: subjectData?.id || null,
           subsubject_id: subsubjectData?.id || null,
+          teacher_name: assignment.teacher || null,
         })
         .eq('id', editingAssignment.id);
 
@@ -930,9 +956,9 @@ export function HomeScreen() {
                 <span className="text-lg text-foreground shrink-0" style={{ fontWeight: 600 }}>
                   {assignment.deadline}
                 </span>
-                {assignment.isUrgent && (
+                {assignment.isUrgent && !assignment.isCompleted && (
                   <Badge variant="destructive" className="text-xs px-2 py-0.5 rounded-full shrink-0">
-                  締切間近
+                  {assignment.isOverdue ? "締切超過" : "締切間近"}
                   </Badge>
                 )}
                 </div>
@@ -955,13 +981,6 @@ export function HomeScreen() {
                 </span>
                 )}
               </div>
-
-              {/* Content: Description */}
-              {assignment.description && (
-                <p className="text-base text-foreground break-words" style={{ fontWeight: 500 }}>
-                {assignment.description}
-                </p>
-              )}
 
               {/* Bottom: Submit Method */}
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1181,10 +1200,10 @@ export function HomeScreen() {
       {/* Bottom Navigation */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-border">
       <div className="max-w-4xl mx-auto px-4 py-2">
-        <div className="grid grid-cols-4 gap-2">
-        <Button 
-          variant="ghost" 
-          size="sm" 
+        <div className="grid grid-cols-3 gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
           className="flex-col h-auto py-2 gap-1"
         >
           <List className="h-5 w-5 text-primary" />
@@ -1198,15 +1217,6 @@ export function HomeScreen() {
         >
           <Calendar className="h-5 w-5 text-muted-foreground" />
           <span className="text-xs text-muted-foreground">スケジュール</span>
-        </Button>
-        <Button
-          onClick={() => navigate("/notifications")}
-          variant="ghost"
-          size="sm"
-          className="flex-col h-auto py-2 gap-1"
-        >
-          <NotificationBadge count={notificationCount} />
-          <span className="text-xs text-muted-foreground">通知</span>
         </Button>
         <Button
           onClick={() => navigate("/history")}

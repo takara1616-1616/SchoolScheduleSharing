@@ -164,15 +164,32 @@ export function ReminderModal({
       const dueDateObj = new Date(year, month - 1, day);
       const reminderDateTime = option.calculateTime(dueDateObj);
 
-      const { error } = await supabase
+      console.log("Attempting to insert reminder:", {
+        user_id: userId,
+        announcement_id: announcementId,
+        remind_at: reminderDateTime.toISOString(),
+      });
+
+      const { data, error } = await supabase
         .from('reminders')
         .insert({
           user_id: userId,
           announcement_id: announcementId,
           remind_at: reminderDateTime.toISOString(),
-        });
+        })
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase error details:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+        });
+        throw error;
+      }
+
+      console.log("Successfully inserted reminder:", data);
 
       toast.success("リマインダーを設定しました");
       setSelected(null);
