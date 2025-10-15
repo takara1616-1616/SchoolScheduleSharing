@@ -158,7 +158,10 @@ export function ReminderModal({
       const option = reminderOptions.find(opt => opt.id === selected);
       if (!option) throw new Error("Invalid option");
 
-      const dueDateObj = new Date(dueDate);
+      // ISO形式の日付をローカル時刻として解釈（タイムゾーンのずれを防ぐ）
+      const dateStr = dueDate.split('T')[0]; // "2025-01-15"
+      const [year, month, day] = dateStr.split('-').map(Number);
+      const dueDateObj = new Date(year, month - 1, day);
       const reminderDateTime = option.calculateTime(dueDateObj);
 
       const { error } = await supabase

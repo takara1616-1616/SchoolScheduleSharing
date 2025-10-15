@@ -87,24 +87,26 @@ export function AddAssignmentModal({
 
   useEffect(() => {
     if (open && editingAssignment) {
+      console.log("Editing assignment:", editingAssignment);
       setFormData({
-        subject: editingAssignment.subject,
-        subsubject: editingAssignment.subsubject,
-        teacher: editingAssignment.teacher,
-        // title: editingAssignment.title, 
-        description: editingAssignment.description,
-        submission_method: editingAssignment.submission_method,
-        dueDate: editingAssignment.dueDate,
+        subject: editingAssignment.subject || "",
+        subsubject: editingAssignment.subsubject || "",
+        teacher: editingAssignment.teacher || "",
+        description: editingAssignment.description || "",
+        submission_method: editingAssignment.submission_method || "",
+        dueDate: editingAssignment.dueDate || "",
       });
       if (editingAssignment.dueDate) {
-        setSelectedDate(new Date(editingAssignment.dueDate));
+        // ISO形式の日付をローカル時刻として解釈（タイムゾーンのずれを防ぐ）
+        const dateStr = editingAssignment.dueDate.split('T')[0]; // "2025-01-15"
+        const [year, month, day] = dateStr.split('-').map(Number);
+        setSelectedDate(new Date(year, month - 1, day));
       }
-    } else if (open) {
+    } else if (open && !editingAssignment) {
       setFormData({
         subject: "",
         subsubject: "",
         teacher: "",
-        // title: "", 
         description: "",
         submission_method: "",
         dueDate: "",
@@ -116,7 +118,11 @@ export function AddAssignmentModal({
   const handleDateSelect = (date: Date | undefined) => {
     setSelectedDate(date);
     if (date) {
-      const dateString = date.toISOString(); // ISO形式で保存
+      // ローカル日付をISO形式の日付文字列に変換（タイムゾーンのずれを防ぐ）
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const dateString = `${year}-${month}-${day}T00:00:00`;
       setFormData({ ...formData, dueDate: dateString });
       setIsCalendarOpen(false);
     }
@@ -297,7 +303,13 @@ export function AddAssignmentModal({
                 >
                   <CalendarIcon className="mr-2.5 h-5 w-5 shrink-0 text-primary" />
                   {formData.dueDate ? (
-                    <span className="text-foreground">{new Date(formData.dueDate).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' })}</span>
+                    <span className="text-foreground">{(() => {
+                      // ISO形式の日付をローカル時刻として解釈
+                      const dateStr = formData.dueDate.split('T')[0];
+                      const [year, month, day] = dateStr.split('-').map(Number);
+                      const localDate = new Date(year, month - 1, day);
+                      return localDate.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
+                    })()}</span>
                   ) : (
                     <span className="text-muted-foreground">日付を選択してください</span>
                   )}

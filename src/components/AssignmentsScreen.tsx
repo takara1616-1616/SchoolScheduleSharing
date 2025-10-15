@@ -83,10 +83,15 @@ export function AssignmentsScreen() {
       };
 
       const assignments: Assignment[] = (announcementsData || []).map((item: any) => {
-        const dueDate = item.due_date ? new Date(item.due_date) : null;
-        const daysUntilDue = dueDate
-          ? Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-          : null;
+        // ISO形式の日付をローカル時刻として解釈（タイムゾーンのずれを防ぐ）
+        let dueDate: Date | null = null;
+        let daysUntilDue: number | null = null;
+        if (item.due_date) {
+          const dateStr = item.due_date.split('T')[0]; // "2025-01-15"
+          const [year, month, day] = dateStr.split('-').map(Number);
+          dueDate = new Date(year, month - 1, day);
+          daysUntilDue = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        }
         const isUrgent = daysUntilDue !== null && daysUntilDue > 0 && daysUntilDue <= 3;
 
         const subjectName = (Array.isArray(item.subjects) ? (item.subjects as any)[0]?.name : (item.subjects as any)?.name) || "";

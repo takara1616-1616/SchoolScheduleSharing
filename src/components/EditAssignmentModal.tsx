@@ -13,6 +13,10 @@ interface Assignment {
   isUrgent?: boolean;
   isCompleted: boolean;
   submission_method: string;
+  // 編集用の元データ
+  rawSubjectName: string;
+  rawSubsubjectName: string;
+  rawDueDate: string;
 }
 
 interface EditAssignmentModalProps {

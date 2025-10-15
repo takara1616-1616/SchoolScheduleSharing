@@ -81,19 +81,31 @@ export function AddTestRangeModal({ open, onClose, onSave, initialData }: AddTes
 
   useEffect(() => {
     if (open && initialData) {
-      setSubject(initialData.subject);
-      setSubjectColor(initialData.subjectColor);
-      setCourse(initialData.course);
-      setContent(initialData.content);
-      
-      // Parse the date string (e.g., "6月12日(土)")
+      console.log("Editing test range - initialData:", initialData);
+      setSubject(initialData.subject || "");
+      setSubjectColor(initialData.subjectColor || "");
+      setCourse(initialData.course || "");
+      setContent(initialData.content || "");
+
+      // Parse the date string
       try {
-        const dateMatch = initialData.testDate.match(/(\d+)月(\d+)日/);
-        if (dateMatch) {
-          const month = parseInt(dateMatch[1]);
-          const day = parseInt(dateMatch[2]);
-          const year = new Date().getFullYear();
-          setTestDate(new Date(year, month - 1, day));
+        if (initialData.testDate && typeof initialData.testDate === 'string') {
+          // Check if it's an ISO format date (e.g., "2025-01-15T00:00:00.000Z")
+          if (initialData.testDate.includes('-') && initialData.testDate.includes('T')) {
+            // ISO形式の日付をローカル時刻として解釈（タイムゾーンのずれを防ぐ）
+            const dateStr = initialData.testDate.split('T')[0]; // "2025-01-15"
+            const [year, month, day] = dateStr.split('-').map(Number);
+            setTestDate(new Date(year, month - 1, day));
+          } else {
+            // Parse Japanese format (e.g., "6月12日(土)")
+            const dateMatch = initialData.testDate.match(/(\d+)月(\d+)日/);
+            if (dateMatch) {
+              const month = parseInt(dateMatch[1]);
+              const day = parseInt(dateMatch[2]);
+              const year = new Date().getFullYear();
+              setTestDate(new Date(year, month - 1, day));
+            }
+          }
         }
       } catch (error) {
         console.error("Error parsing date:", error);

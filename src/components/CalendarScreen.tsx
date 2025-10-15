@@ -171,7 +171,10 @@ export function CalendarScreen() {
         let deadlineDate = new Date();
 
         if (announcement.due_date) {
-          deadlineDate = new Date(announcement.due_date);
+          // ISO形式の日付をローカル時刻として解釈（タイムゾーンのずれを防ぐ）
+          const dateStr = announcement.due_date.split('T')[0]; // "2025-01-15"
+          const [year, month, day] = dateStr.split('-').map(Number);
+          deadlineDate = new Date(year, month - 1, day);
           deadlineFormatted = deadlineDate.toLocaleDateString('ja-JP', {
             month: 'long',
             day: 'numeric',
@@ -439,30 +442,45 @@ export function CalendarScreen() {
   };
 
   const handleToggleAssignment = async (id: number, currentStatus: boolean) => {
+    console.log("📋 [CalendarScreen] handleToggleAssignment called:", { id, currentStatus });
+
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      console.error("❌ [CalendarScreen] User not authenticated");
+      toast.error("ユーザーが認証されていません");
+      return;
+    }
+
+    console.log("✅ [CalendarScreen] User authenticated:", user.email);
 
     try {
       // Get numeric user_id by email
       const userId = await getUserIdByEmail(user.email);
       if (!userId) {
+        console.error("❌ [CalendarScreen] Failed to get user_id");
         toast.error("ユーザー情報の取得に失敗しました");
         return;
       }
       const userIdToUse = userId;
 
+      console.log("✅ [CalendarScreen] Got userId:", userIdToUse);
+
       const newStatus = currentStatus ? 'pending' : 'submitted';
+      console.log("🔄 [CalendarScreen] Toggling status:", { currentStatus, newStatus });
 
       // Check if submission already exists
-      const { data: existingSubmission } = await supabase
+      const { data: existingSubmission, error: checkError } = await supabase
         .from('submissions')
         .select('id')
         .eq('announcement_id', id)
         .eq('user_id', userIdToUse)
         .maybeSingle();
 
+      console.log("🔍 [CalendarScreen] Existing submission check:", { existingSubmission, checkError });
+
       let error;
       if (existingSubmission) {
+        console.log("📝 [CalendarScreen] Updating existing submission...");
         // Update existing submission
         const result = await supabase
           .from('submissions')
@@ -473,7 +491,9 @@ export function CalendarScreen() {
           .eq('announcement_id', id)
           .eq('user_id', userIdToUse);
         error = result.error;
+        console.log("📝 [CalendarScreen] Update result:", { error, data: result.data });
       } else {
+        console.log("➕ [CalendarScreen] Inserting new submission...");
         // Insert new submission
         const result = await supabase
           .from('submissions')
@@ -484,19 +504,21 @@ export function CalendarScreen() {
             submitted_at: newStatus === 'submitted' ? new Date().toISOString() : null,
           });
         error = result.error;
+        console.log("➕ [CalendarScreen] Insert result:", { error, data: result.data });
       }
 
       if (error) {
-        console.error("Error updating submission status:", error);
+        console.error("❌ [CalendarScreen] Error updating submission status:", error);
         toast.error("提出状況の更新中にエラーが発生しました");
       } else {
+        console.log("✅ [CalendarScreen] Successfully updated submission status");
         setAssignments((prev) =>
           prev.map((item) => (item.id === id ? { ...item, isCompleted: !currentStatus } : item))
         );
         toast.success(newStatus === 'submitted' ? "提出完了 よくできました" : "未提出に変更");
       }
     } catch (err: any) {
-      console.error("Error toggling assignment:", err);
+      console.error("❌ [CalendarScreen] Error toggling assignment:", err);
       toast.error("提出状況の更新中にエラーが発生しました");
     }
   };

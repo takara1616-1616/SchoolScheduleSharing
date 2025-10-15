@@ -20,23 +20,31 @@ import { EditGeneralNoticeModal } from "./EditGeneralNoticeModal";
 // 仮の型定義 (FigmaのモックデータとSupabaseのER図を統合)
 interface AssignmentItem {
   id: number;
-  subject: string;
+  subject: string;  // 表示用: "数学 (数学I)"
   subjectColor: string;
   teacher?: string;
   description: string;
-  deadline: string;
+  deadline: string;  // 表示用: "1月15日(水)"
   isUrgent?: boolean;
   isCompleted: boolean;
   submission_method: string;
+  // 編集用の元データ
+  rawSubjectName: string;  // 元の教科名: "数学"
+  rawSubsubjectName: string;  // 元の科目名: "数学I"
+  rawDueDate: string;  // ISO形式の日付
 }
 
 interface TestItem {
   id: number;
-  subject: string;
+  subject: string;  // 表示用: "数学 (数学I)"
   subjectColor: string;
   description: string;
-  deadline: string;
+  deadline: string;  // 表示用: "1月15日(水)"
   isCompleted: boolean;
+  // 編集用の元データ
+  rawSubjectName: string;  // 元の教科名: "数学"
+  rawSubsubjectName: string;  // 元の科目名: "数学I"
+  rawDueDate: string;  // ISO形式の日付
 }
 
 // 一般的なお知らせの型定義
@@ -192,16 +200,22 @@ export function HomeScreen() {
         let dateFormatted = "";
 
         if (announcement.due_date) {
-          const dueDate = new Date(announcement.due_date);
-          deadlineFormatted = dueDate.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' }).replace(/\(.*?\)/g, '($&)');
+          // ISO形式の日付をローカル時刻として解釈（タイムゾーンのずれを防ぐ）
+          const dateStr = announcement.due_date.split('T')[0]; // "2025-01-15"
+          const [year, month, day] = dateStr.split('-').map(Number);
+          const dueDate = new Date(year, month - 1, day);
+          deadlineFormatted = dueDate.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
           if (dueDate > now && dueDate <= threeDaysLater) {
             isUrgent = true;
           }
         }
-        
-        if (announcement.created_at) { 
-          const createdDate = new Date(announcement.created_at);
-          dateFormatted = createdDate.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' }).replace(/\(.*?\)/g, '($&)');
+
+        // その他のお知らせの日付もdue_dateから取得（created_atではない）
+        if (announcement.type === 'general_notice' && announcement.due_date) {
+          const dateStr = announcement.due_date.split('T')[0];
+          const [year, month, day] = dateStr.split('-').map(Number);
+          const noticeDate = new Date(year, month - 1, day);
+          dateFormatted = noticeDate.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
         }
 
         if (announcement.type === 'assignment') {
@@ -227,6 +241,10 @@ export function HomeScreen() {
             isUrgent: isUrgent,
             isCompleted: submissionData?.status === 'submitted', // statusが'submitted'なら完了
             submission_method: announcement.submission_method,
+            // 編集用の元データ
+            rawSubjectName: subjectName,
+            rawSubsubjectName: subsubjectName,
+            rawDueDate: announcement.due_date,
           });
         } else if (announcement.type === 'test') {
           fetchedTests.push({
@@ -236,6 +254,10 @@ export function HomeScreen() {
             description: announcement.description,
             deadline: deadlineFormatted,
             isCompleted: false, // テストの完了状態は別途考慮
+            // 編集用の元データ
+            rawSubjectName: subjectName,
+            rawSubsubjectName: subsubjectName,
+            rawDueDate: announcement.due_date,
           });
         } else if (announcement.type === 'general_notice') {
            fetchedGeneralNotices.push({
@@ -282,30 +304,73 @@ export function HomeScreen() {
         return;
     }
 
-    // 課題登録ロジック
-    const subjectId = getSubjectIdByName(assignment.subject);
+    try {
+      // Get numeric user_id
+      const numericUserId = await getUserIdByEmail(user.email);
+      if (!numericUserId) {
+        toast.error("ユーザー情報の取得に失敗しました");
+        setLoading(false);
+        return;
+      }
 
-    const { error } = await supabase
-        .from('announcements')
-        .insert({
-            title: null, // titleはnullで保存
-            description: assignment.description,
-            type: 'assignment',
-            due_date: assignment.dueDate,
-            submission_method: assignment.submission_method,
-            subject_id: subjectId,
-            created_by: user.id,
-        });
+      // Get subject_id by name
+      const { data: subjectData, error: subjectError } = await supabase
+        .from('subjects')
+        .select('id')
+        .eq('name', assignment.subject)
+        .maybeSingle();
 
-    if (error) {
-        console.error("Error adding assignment:", error);
-        toast.error("提出物の登録中にエラーが発生しました。");
-    } else {
-        toast.success("提出物を追加しました");
-        setIsAddModalOpen(false);
-        await fetchAnnouncements();
+      if (subjectError) {
+        console.error("Error fetching subject:", subjectError);
+        toast.error("教科の取得に失敗しました");
+        setLoading(false);
+        return;
+      }
+
+      // Get subsubject_id by name
+      const { data: subsubjectData, error: subsubjectError } = await supabase
+        .from('subsubjects')
+        .select('id')
+        .eq('name', assignment.subsubject)
+        .maybeSingle();
+
+      if (subsubjectError) {
+        console.error("Error fetching subsubject:", subsubjectError);
+        toast.error("科目の取得に失敗しました");
+        setLoading(false);
+        return;
+      }
+
+      // Create title from subject and subsubject
+      const title = assignment.subsubject ? `${assignment.subject} (${assignment.subsubject})` : assignment.subject;
+
+      const { error } = await supabase
+          .from('announcements')
+          .insert({
+              title: title,
+              description: assignment.description,
+              type: 'assignment',
+              due_date: assignment.dueDate,
+              submission_method: assignment.submission_method,
+              subject_id: subjectData?.id || null,
+              subsubject_id: subsubjectData?.id || null,
+              created_by: numericUserId,
+          });
+
+      if (error) {
+          console.error("Error adding assignment:", error);
+          toast.error("提出物の登録中にエラーが発生しました。");
+      } else {
+          toast.success("提出物を追加しました");
+          setIsAddModalOpen(false);
+          await fetchAnnouncements();
+      }
+    } catch (err) {
+      console.error("Exception in handleAddAssignment:", err);
+      toast.error("提出物の登録中にエラーが発生しました");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleSelectAssignmentToEdit = (assignment: AssignmentItem) => {
@@ -314,41 +379,115 @@ export function HomeScreen() {
   };
 
   const handleUpdateAssignment = async (assignment: { subject: string; subsubject: string; teacher: string; description: string; submission_method: string; dueDate: string }) => {
-    // 💡 編集ロジックの実装が必要です。ここでは一旦再取得とトースト表示のみ
-    await fetchAnnouncements();
-    toast.success("提出物を更新しました");
-    setIsEditModalOpen(false);
-    setEditingAssignment(null);
+    if (!editingAssignment) {
+      toast.error("編集対象が選択されていません");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Get subject_id by name
+      const { data: subjectData, error: subjectError } = await supabase
+        .from('subjects')
+        .select('id')
+        .eq('name', assignment.subject)
+        .maybeSingle();
+
+      if (subjectError) {
+        console.error("Error fetching subject:", subjectError);
+        toast.error("教科の取得に失敗しました");
+        setLoading(false);
+        return;
+      }
+
+      // Get subsubject_id by name
+      const { data: subsubjectData, error: subsubjectError } = await supabase
+        .from('subsubjects')
+        .select('id')
+        .eq('name', assignment.subsubject)
+        .maybeSingle();
+
+      if (subsubjectError) {
+        console.error("Error fetching subsubject:", subsubjectError);
+        toast.error("科目の取得に失敗しました");
+        setLoading(false);
+        return;
+      }
+
+      // Create title from subject and subsubject
+      const title = assignment.subsubject ? `${assignment.subject} (${assignment.subsubject})` : assignment.subject;
+
+      const { error } = await supabase
+        .from('announcements')
+        .update({
+          title: title,
+          description: assignment.description,
+          due_date: assignment.dueDate,
+          submission_method: assignment.submission_method,
+          subject_id: subjectData?.id || null,
+          subsubject_id: subsubjectData?.id || null,
+        })
+        .eq('id', editingAssignment.id);
+
+      if (error) {
+        console.error("Error updating assignment:", error);
+        toast.error("提出物の更新中にエラーが発生しました");
+      } else {
+        toast.success("提出物を更新しました");
+        setIsEditModalOpen(false);
+        setEditingAssignment(null);
+        await fetchAnnouncements();
+      }
+    } catch (err) {
+      console.error("Exception in handleUpdateAssignment:", err);
+      toast.error("提出物の更新中にエラーが発生しました");
+    } finally {
+      setLoading(false);
+    }
   };
 
   // 📌 修正: 提出完了トグル処理 (データベース連携)
   const handleToggleAssignment = async (id: number, currentStatus: boolean, subjectTitle: string) => {
+    console.log("📋 handleToggleAssignment called:", { id, currentStatus, subjectTitle });
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
+        console.error("❌ User not authenticated");
         toast.error("ユーザーが認証されていません。");
         return;
     }
+
+    console.log("✅ User authenticated:", user.email);
+    console.log("🔍 User auth object:", user);
 
     try {
       // Get numeric user_id by email
       const userId = await getUserIdByEmail(user.email);
       if (!userId) {
+        console.error("❌ Failed to get user_id");
         toast.error("ユーザー情報の取得に失敗しました");
         return;
       }
 
+      console.log("✅ Got userId:", userId);
+
       const newStatus = currentStatus ? 'pending' : 'submitted';
+      console.log("🔄 Toggling status:", { currentStatus, newStatus });
 
       // Check if submission already exists
-      const { data: existingSubmission } = await supabase
+      const { data: existingSubmission, error: checkError } = await supabase
         .from('submissions')
         .select('id')
         .eq('announcement_id', id)
         .eq('user_id', userId)
         .maybeSingle();
 
+      console.log("🔍 Existing submission check:", { existingSubmission, checkError });
+
       let error;
       if (existingSubmission) {
+        console.log("📝 Updating existing submission...");
         // Update existing submission
         const result = await supabase
           .from('submissions')
@@ -359,7 +498,9 @@ export function HomeScreen() {
           .eq('announcement_id', id)
           .eq('user_id', userId);
         error = result.error;
+        console.log("📝 Update result:", { error, data: result.data });
       } else {
+        console.log("➕ Inserting new submission...");
         // Insert new submission
         const result = await supabase
           .from('submissions')
@@ -370,12 +511,14 @@ export function HomeScreen() {
             submitted_at: newStatus === 'submitted' ? new Date().toISOString() : null,
           });
         error = result.error;
+        console.log("➕ Insert result:", { error, data: result.data });
       }
 
       if (error) {
-        console.error("Error updating submission status:", error);
+        console.error("❌ Error updating submission status:", error);
         toast.error("提出状況の更新中にエラーが発生しました。");
       } else {
+        console.log("✅ Successfully updated submission status");
         // フロントエンドのStateを更新
         setAssignments((prev) =>
           prev.map((item) => (item.id === id ? { ...item, isCompleted: !currentStatus } : item))
@@ -393,7 +536,7 @@ export function HomeScreen() {
         }
       }
     } catch (err: any) {
-      console.error("Error in handleToggleAssignment:", err);
+      console.error("❌ Error in handleToggleAssignment:", err);
       toast.error("提出状況の更新中にエラーが発生しました");
     }
   };
@@ -403,7 +546,7 @@ export function HomeScreen() {
   };
 
   // テスト範囲追加処理
-  const handleAddTest = async (testRange: { subject: string; subsubject: string; title: string; description: string; testDate: string }) => {
+  const handleAddTest = async (testRange: { subject: string; subjectColor: string; course: string; content: string; testDate: string }) => {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -413,43 +556,193 @@ export function HomeScreen() {
         return;
     }
 
-    // テスト範囲登録ロジック
-    const subjectId = getSubjectIdByName(testRange.subject);
+    try {
+      // Get numeric user_id
+      const numericUserId = await getUserIdByEmail(user.email);
+      if (!numericUserId) {
+        toast.error("ユーザー情報の取得に失敗しました");
+        setLoading(false);
+        return;
+      }
 
-    const { error } = await supabase
-        .from('announcements')
-        .insert({
-            title: testRange.title,
-            description: testRange.description,
-            type: 'test',
-            due_date: testRange.testDate,
-            submission_method: 'none',
-            subject_id: subjectId,
-            created_by: user.id,
-        });
+      // Get subject_id by name
+      const { data: subjectData, error: subjectError } = await supabase
+        .from('subjects')
+        .select('id')
+        .eq('name', testRange.subject)
+        .maybeSingle();
 
-    if (error) {
-        console.error("Error adding test range:", error);
-        toast.error("テスト範囲の登録中にエラーが発生しました。");
-    } else {
-        toast.success("テスト範囲を追加しました");
-        setIsAddTestModalOpen(false);
-        await fetchAnnouncements();
+      if (subjectError) {
+        console.error("Error fetching subject:", subjectError);
+        toast.error("教科の取得に失敗しました");
+        setLoading(false);
+        return;
+      }
+
+      // Get subsubject_id by name (course)
+      const { data: subsubjectData, error: subsubjectError } = await supabase
+        .from('subsubjects')
+        .select('id')
+        .eq('name', testRange.course)
+        .maybeSingle();
+
+      if (subsubjectError) {
+        console.error("Error fetching subsubject:", subsubjectError);
+        toast.error("科目の取得に失敗しました");
+        setLoading(false);
+        return;
+      }
+
+      // Parse date string to ISO format
+      let isoDate: string;
+      try {
+        // testDate is in format "M月d日(E)" like "6月12日(土)"
+        const dateMatch = testRange.testDate.match(/(\d+)月(\d+)日/);
+        if (dateMatch) {
+          const month = parseInt(dateMatch[1]);
+          const day = parseInt(dateMatch[2]);
+          const year = new Date().getFullYear();
+          // ローカル日付をISO形式の日付文字列に変換（タイムゾーンのずれを防ぐ）
+          const monthStr = String(month).padStart(2, '0');
+          const dayStr = String(day).padStart(2, '0');
+          isoDate = `${year}-${monthStr}-${dayStr}T00:00:00`;
+        } else {
+          throw new Error("Invalid date format");
+        }
+      } catch (err) {
+        console.error("Error parsing date:", err);
+        toast.error("日付の形式が正しくありません");
+        setLoading(false);
+        return;
+      }
+
+      // Create title from subject and course
+      const title = testRange.course ? `${testRange.subject} (${testRange.course})` : testRange.subject;
+
+      const { error } = await supabase
+          .from('announcements')
+          .insert({
+              title: title,
+              description: testRange.content,
+              type: 'test',
+              due_date: isoDate,
+              submission_method: 'none',
+              subject_id: subjectData?.id || null,
+              subsubject_id: subsubjectData?.id || null,
+              created_by: numericUserId,
+          });
+
+      if (error) {
+          console.error("Error adding test range:", error);
+          toast.error("テスト範囲の登録中にエラーが発生しました。");
+      } else {
+          toast.success("テスト範囲を追加しました");
+          setIsAddTestModalOpen(false);
+          await fetchAnnouncements();
+      }
+    } catch (err) {
+      console.error("Exception in handleAddTest:", err);
+      toast.error("テスト範囲の登録中にエラーが発生しました");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleSelectTestToEdit = (test: TestItem) => {
+    console.log("handleSelectTestToEdit - selected test:", test);
     setEditingTest(test);
     setIsEditTestModalOpen(true);
   };
 
-  const handleUpdateTest = async (testRange: { subject: string; subsubject: string; title: string; description: string; testDate: string }) => {
-    // 💡 編集ロジックの実装が必要です。ここでは一旦再取得とトースト表示のみ
-    await fetchAnnouncements();
-    toast.success("テスト範囲を更新しました");
-    setIsEditTestModalOpen(false);
-    setEditingTest(null);
+  const handleUpdateTest = async (testRange: { subject: string; subjectColor: string; course: string; content: string; testDate: string }) => {
+    if (!editingTest) {
+      toast.error("編集対象が選択されていません");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Get subject_id by name
+      const { data: subjectData, error: subjectError } = await supabase
+        .from('subjects')
+        .select('id')
+        .eq('name', testRange.subject)
+        .maybeSingle();
+
+      if (subjectError) {
+        console.error("Error fetching subject:", subjectError);
+        toast.error("教科の取得に失敗しました");
+        setLoading(false);
+        return;
+      }
+
+      // Get subsubject_id by name (course)
+      const { data: subsubjectData, error: subsubjectError } = await supabase
+        .from('subsubjects')
+        .select('id')
+        .eq('name', testRange.course)
+        .maybeSingle();
+
+      if (subsubjectError) {
+        console.error("Error fetching subsubject:", subsubjectError);
+        toast.error("科目の取得に失敗しました");
+        setLoading(false);
+        return;
+      }
+
+      // Parse date string to ISO format
+      let isoDate: string;
+      try {
+        // testDate is in format "M月d日(E)" like "6月12日(土)"
+        const dateMatch = testRange.testDate.match(/(\d+)月(\d+)日/);
+        if (dateMatch) {
+          const month = parseInt(dateMatch[1]);
+          const day = parseInt(dateMatch[2]);
+          const year = new Date().getFullYear();
+          // ローカル日付をISO形式の日付文字列に変換（タイムゾーンのずれを防ぐ）
+          const monthStr = String(month).padStart(2, '0');
+          const dayStr = String(day).padStart(2, '0');
+          isoDate = `${year}-${monthStr}-${dayStr}T00:00:00`;
+        } else {
+          throw new Error("Invalid date format");
+        }
+      } catch (err) {
+        console.error("Error parsing date:", err);
+        toast.error("日付の形式が正しくありません");
+        setLoading(false);
+        return;
+      }
+
+      // Create title from subject and course
+      const title = testRange.course ? `${testRange.subject} (${testRange.course})` : testRange.subject;
+
+      const { error } = await supabase
+        .from('announcements')
+        .update({
+          title: title,
+          description: testRange.content,
+          due_date: isoDate,
+          subject_id: subjectData?.id || null,
+          subsubject_id: subsubjectData?.id || null,
+        })
+        .eq('id', editingTest.id);
+
+      if (error) {
+        console.error("Error updating test range:", error);
+        toast.error("テスト範囲の更新中にエラーが発生しました");
+      } else {
+        toast.success("テスト範囲を更新しました");
+        setIsEditTestModalOpen(false);
+        setEditingTest(null);
+        await fetchAnnouncements();
+      }
+    } catch (err) {
+      console.error("Exception in handleUpdateTest:", err);
+      toast.error("テスト範囲の更新中にエラーが発生しました");
+    } finally {
+      setLoading(false);
+    }
   };
   
   // その他のお知らせの追加処理（Supabaseに保存する）
@@ -458,24 +751,45 @@ export function HomeScreen() {
         toast.error("日付が選択されていません。");
         return;
     }
-    
+
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
-    
-    if (user) {
+
+    if (!user) {
+        toast.error("ユーザーが認証されていません。");
+        setLoading(false);
+        return;
+    }
+
+    try {
+      // Get numeric user_id
+      const numericUserId = await getUserIdByEmail(user.email);
+      if (!numericUserId) {
+        toast.error("ユーザー情報の取得に失敗しました");
+        setLoading(false);
+        return;
+      }
+
+      // ローカル日付をISO形式の日付文字列に変換（タイムゾーンのずれを防ぐ）
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const dateString = `${year}-${month}-${day}T00:00:00`;
+
       // Supabaseへのデータ登録処理
       const { error } = await supabase
         .from('announcements')
         .insert({
-          title: title, 
+          title: title,
           description: description,
           type: 'general_notice',
-          created_by: user.id, 
-          due_date: date.toISOString(), 
-          submission_method: 'none',
-          subject_id: 1, // 仮の subject_id=1 を追加
+          created_by: numericUserId,
+          due_date: dateString,
+          submission_method: 'なし',  // general_notice doesn't need submission method
+          subject_id: null, // general_notice doesn't need subject_id
+          subsubject_id: null,
         });
-      
+
       if (error) {
         console.error("Error adding general notice:", error);
         toast.error("お知らせの登録に失敗しました。");
@@ -484,24 +798,67 @@ export function HomeScreen() {
         setIsAddGeneralNoticeModalOpen(false);
         await fetchAnnouncements();
       }
+    } catch (err) {
+      console.error("Exception in handleAddGeneralNotice:", err);
+      toast.error("お知らせの登録中にエラーが発生しました");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
   
   // 編集対象選択モーダルで項目が選択されたときの処理
   const handleSelectGeneralNoticeToEdit = (notice: GeneralNoticeItem) => {
-      // 💡 編集対象をStateにセットし、追加モーダルを編集モードで開くロジックが必要
       console.log("Edit general notice selected:", notice);
-      // setEditingGeneralNotice(notice);
-      // setIsAddGeneralNoticeModalOpen(true);
+      setEditingGeneralNotice(notice);
       setIsEditGeneralNoticeSelectModalOpen(false); // 選択モーダルを閉じる
+      setIsAddGeneralNoticeModalOpen(true); // 編集モーダルを開く
   };
-  
-  // その他のお知らせの編集処理（ダミー）
-  const handleEditGeneralNotice = async () => {
-    toast.info("その他のお知らせの編集処理が実行されました");
-    setIsEditGeneralNoticeSelectModalOpen(false);
-    await fetchAnnouncements();
+
+  // その他のお知らせの編集処理
+  const handleUpdateGeneralNotice = async ({ title, description, date }: { title: string; description: string; date: Date | undefined }) => {
+    if (!editingGeneralNotice) {
+      toast.error("編集対象が選択されていません");
+      return;
+    }
+
+    if (!date) {
+      toast.error("日付が選択されていません。");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // ローカル日付をISO形式の日付文字列に変換（タイムゾーンのずれを防ぐ）
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const dateString = `${year}-${month}-${day}T00:00:00`;
+
+      const { error } = await supabase
+        .from('announcements')
+        .update({
+          title: title,
+          description: description,
+          due_date: dateString,
+        })
+        .eq('id', editingGeneralNotice.id);
+
+      if (error) {
+        console.error("Error updating general notice:", error);
+        toast.error("お知らせの更新中にエラーが発生しました");
+      } else {
+        toast.success("お知らせを更新しました");
+        setIsAddGeneralNoticeModalOpen(false);
+        setEditingGeneralNotice(null);
+        await fetchAnnouncements();
+      }
+    } catch (err) {
+      console.error("Exception in handleUpdateGeneralNotice:", err);
+      toast.error("お知らせの更新中にエラーが発生しました");
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) {
@@ -884,6 +1241,9 @@ export function HomeScreen() {
         isUrgent: a.isUrgent,
         isCompleted: a.isCompleted,
         submission_method: a.submission_method,
+        rawSubjectName: a.rawSubjectName,
+        rawSubsubjectName: a.rawSubsubjectName,
+        rawDueDate: a.rawDueDate,
       }))}
       onSelectAssignment={handleSelectAssignmentToEdit}
       />
@@ -896,12 +1256,12 @@ export function HomeScreen() {
       }}
       onSave={handleUpdateAssignment}
       editingAssignment={editingAssignment ? {
-        subject: editingAssignment.subject,
-        subsubject: "",
+        subject: editingAssignment.rawSubjectName,
+        subsubject: editingAssignment.rawSubsubjectName,
         teacher: editingAssignment.teacher || "",
         description: editingAssignment.description,
         submission_method: editingAssignment.submission_method,
-        dueDate: editingAssignment.deadline,
+        dueDate: editingAssignment.rawDueDate,
       } : undefined}
       />
 
@@ -921,6 +1281,9 @@ export function HomeScreen() {
         description: t.description,
         deadline: t.deadline,
         isCompleted: t.isCompleted,
+        rawSubjectName: t.rawSubjectName,
+        rawSubsubjectName: t.rawSubsubjectName,
+        rawDueDate: t.rawDueDate,
       }))}
       onSelectTest={handleSelectTestToEdit}
       />
@@ -935,25 +1298,41 @@ export function HomeScreen() {
       initialData={
         editingTest
         ? {
-          subject: editingTest.subject,
-          subsubject: "",
-          title: editingTest.description,
-          description: editingTest.description,
-          testDate: editingTest.deadline,
+          subject: editingTest.rawSubjectName,
+          subjectColor: editingTest.subjectColor,
+          course: editingTest.rawSubsubjectName,
+          content: editingTest.description,
+          testDate: editingTest.rawDueDate,
           }
         : undefined
       }
       />
       
       {/* 📌 その他のお知らせの追加/編集モーダル */}
-      <AddGeneralNoticeModal 
+      <AddGeneralNoticeModal
         open={isAddGeneralNoticeModalOpen}
         onClose={() => {
             setIsAddGeneralNoticeModalOpen(false);
             setEditingGeneralNotice(null);
         }}
-        onSave={handleAddGeneralNotice}
-        // initialData={editingGeneralNotice || undefined} // AddGeneralNoticeModalの実装に依存
+        onSave={editingGeneralNotice ? handleUpdateGeneralNotice : handleAddGeneralNotice}
+        initialData={editingGeneralNotice ? {
+          id: String(editingGeneralNotice.id),
+          title: editingGeneralNotice.title,
+          description: editingGeneralNotice.description,
+          date: editingGeneralNotice.date ? (() => {
+            // 日付文字列をDate型に変換
+            const dateStr = editingGeneralNotice.date; // "10月15日(火)"形式
+            const match = dateStr.match(/(\d+)月(\d+)日/);
+            if (match) {
+              const month = parseInt(match[1]);
+              const day = parseInt(match[2]);
+              const year = new Date().getFullYear();
+              return new Date(year, month - 1, day);
+            }
+            return new Date();
+          })() : new Date(),
+        } : undefined}
       />
       
       {/* 📌 その他のお知らせの編集対象選択モーダル */}

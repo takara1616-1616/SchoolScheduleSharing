@@ -11,6 +11,10 @@ interface TestRange {
   description: string;
   deadline: string;
   isCompleted: boolean;
+  // 編集用の元データ
+  rawSubjectName: string;
+  rawSubsubjectName: string;
+  rawDueDate: string;
 }
 
 interface EditTestRangeModalProps {

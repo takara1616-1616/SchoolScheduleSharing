@@ -112,32 +112,23 @@ export type Database = {
         Row: {
           id: number;
           announcement_id: number | null;
-          subsubject_id: number | null;
-          teacher_id: number | null;
           user_id: number | null;
           submitted_at: string | null;
           status: string;
-          submission_method: string;
         };
         Insert: {
           id?: number;
           announcement_id?: number | null;
-          subsubject_id?: number | null;
-          teacher_id?: number | null;
           user_id?: number | null;
           submitted_at?: string | null;
           status: string;
-          submission_method: string;
         };
         Update: {
           id?: number;
           announcement_id?: number | null;
-          subsubject_id?: number | null;
-          teacher_id?: number | null;
           user_id?: number | null;
           submitted_at?: string | null;
           status?: string;
-          submission_method?: string;
         };
         Relationships: [
           {
@@ -145,20 +136,6 @@ export type Database = {
             columns: ["announcement_id"];
             isOneToOne: false;
             referencedRelation: "announcements";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "SUBMISSIONS_subsubject_id_fkey";
-            columns: ["subsubject_id"];
-            isOneToOne: false;
-            referencedRelation: "subsubjects";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "SUBMISSIONS_teacher_id_fkey";
-            columns: ["teacher_id"];
-            isOneToOne: false;
-            referencedRelation: "users";
             referencedColumns: ["id"];
           },
           {
@@ -266,6 +243,7 @@ export type Database = {
           user_id: number | null;
           class_id: number | null;
           remind_at: string;
+          sent: boolean;
         };
         Insert: {
           id?: number;
@@ -274,6 +252,7 @@ export type Database = {
           user_id?: number | null;
           class_id?: number | null;
           remind_at: string;
+          sent?: boolean;
         };
         Update: {
           id?: number;
@@ -282,6 +261,7 @@ export type Database = {
           user_id?: number | null;
           class_id?: number | null;
           remind_at?: string;
+          sent?: boolean;
         };
         Relationships: [
           {

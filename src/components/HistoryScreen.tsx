@@ -127,7 +127,10 @@ export function HistoryScreen() {
         const displaySubject = subsubjectName ? `${subjectName} (${subsubjectName})` : subjectName;
         const subjectColor = SUBJECT_COLORS[subjectName] || "#7B9FE8";
 
-        const deadlineDate = new Date(announcement.due_date);
+        // ISO形式の日付をローカル時刻として解釈（タイムゾーンのずれを防ぐ）
+        const dateStr = announcement.due_date.split('T')[0]; // "2025-01-15"
+        const [year, month, day] = dateStr.split('-').map(Number);
+        const deadlineDate = new Date(year, month - 1, day);
         const deadlineFormatted = deadlineDate.toLocaleDateString('ja-JP', {
           month: 'long',
           day: 'numeric',
