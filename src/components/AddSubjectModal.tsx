@@ -6,7 +6,7 @@ import { Input } from "./ui/input";
 import { ScrollArea } from "./ui/scroll-area";
 import { Plus, Trash2 } from "lucide-react";
 
-interface SubjectRow {
+export interface SubjectRow {
   id: string;
   category: string;
   categoryColor: string;
@@ -16,7 +16,7 @@ interface SubjectRow {
 interface AddSubjectModalProps {
   open: boolean;
   onClose: () => void;
-  onSave: (subjects: Omit<SubjectRow, "id">[]) => void;
+  onSave: (subjects: Omit<SubjectRow, "id">[]) => void | Promise<void>;
 }
 
 const categoryOptions = [

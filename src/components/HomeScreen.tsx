@@ -1056,7 +1056,8 @@ export function HomeScreen() {
           tests.map((test) => (
             <div
             key={test.id}
-            className="bg-white rounded-2xl p-4 shadow-sm border border-border w-full max-w-full"
+            className="bg-white rounded-2xl p-4 shadow-sm border border-border w-full max-w-full cursor-pointer hover:shadow-md transition-shadow"
+            onClick={() => navigate(`/detail/${test.id}`)}
             >
             <div className="flex gap-3 w-full max-w-full min-w-0">
               {/* Left Color Bar */}
@@ -1135,7 +1136,7 @@ export function HomeScreen() {
             <div
             key={notice.id}
             className="bg-white rounded-2xl p-4 shadow-sm border border-border w-full max-w-full cursor-pointer hover:shadow-md transition-shadow"
-            // onClick={() => navigate(`/general-notice/${notice.id}`)} // 詳細ページへのナビゲーションを想定
+            onClick={() => navigate(`/detail/${notice.id}`)} // ここを追加
             >
             <div className="flex gap-3 w-full max-w-full min-w-0">
               {/* Left Color Bar */}

@@ -11,34 +11,36 @@ import { DetailScreen } from './components/DetailScreen';
 import { AssignmentsScreen } from './components/AssignmentsScreen';
 import { TeacherScreen } from './components/TeacherScreen';
 
+function TeacherScreenWrapper() {
+  const navigate = useNavigate();
+  return <TeacherScreen onBack={() => navigate('/')} />;
+}
 
 function App() {
-  // 💡 修正点 1: useState を使用して、ユーザーのロールを管理します。
-  // 現在は先生画面を確認するため、ロールを 'teacher' に強制固定します。
-  const [userRole] = useState<'teacher' | 'student'>('teacher'); 
-  const isTeacher = userRole === 'teacher';
-
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LoginScreen />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
-        
-        {/* 💡 修正点 2: /home ルートでログインユーザーのロールに基づき、表示コンポーネントを切り替え */}
-        <Route 
-          path="/home" 
-          element={isTeacher ? <TeacherScreen /> : <HomeScreen />} 
-        />
-        
-        {/* /teacher ルートは /home ルートで吸収されたため削除します。 */}
-        {/* 必要に応じて、TeacherScreenWrapperコンポーネントとルートを復活させてください。 */}
-        
+
+        {/* 生徒用ホーム画面 */}
+        <Route path="/home" element={<HomeScreen />} />
+
+        {/* 先生専用ページ */}
+        <Route path="/teacher" element={<TeacherScreenWrapper />} />
+
         <Route path="/detail/:id" element={<DetailScreen />} />
         <Route path="/assignments" element={<AssignmentsScreen />} />
         <Route path="/calendar" element={<CalendarScreen />} />
         <Route path="/history" element={<HistoryScreen />} />
       </Routes>
-      <Toaster />
+      <Toaster
+        position="top-center"
+        expand={true}
+        richColors
+        closeButton
+        visibleToasts={9}
+      />
     </BrowserRouter>
   );
 }

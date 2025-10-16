@@ -11,7 +11,7 @@ import { SUBJECT_COLORS } from "@/constants/colors";
 
 interface AnnouncementDetail {
   id: number;
-  type: 'assignment' | 'test';
+  type: 'assignment' | 'test' | 'general_notice';
   title: string;
   description: string;
   due_date: string;
@@ -150,7 +150,7 @@ export function DetailScreen() {
 
       setAnnouncement({
         id: announcementData.id,
-        type: announcementData.type as 'assignment' | 'test',
+        type: announcementData.type as 'assignment' | 'test' | 'general_notice',
         title: announcementData.title,
         description: announcementData.description || "",
         due_date: announcementData.due_date || "",
@@ -323,14 +323,14 @@ export function DetailScreen() {
               <div className="flex items-start gap-3">
                 <Bell className="h-5 w-5 text-muted-foreground mt-0.5" />
                 <div className="flex-1">
-                  <p className="text-sm text-muted-foreground mb-2">リマインダー</p>
+                  <p className="text-sm text-muted-foreground mb-2">通知予定</p>
                   <Button
                     variant="outline"
                     className="w-full rounded-xl"
                     onClick={() => setIsReminderOpen(true)}
                   >
                     <Bell className="mr-2 h-4 w-4" />
-                    リマインダーを設定
+                    通知予定を設定
                   </Button>
                 </div>
               </div>
@@ -383,6 +383,7 @@ export function DetailScreen() {
         announcementId={announcement.id}
         announcementTitle={announcement.title}
         dueDate={announcement.due_date}
+        noticeType={announcement.type}
       />
     </div>
   );

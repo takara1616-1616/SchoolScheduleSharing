@@ -124,7 +124,7 @@ export async function fetchOtherNotices() {
         description,
         due_date
       `)
-      .eq('type', 'other')
+      .eq('type', 'general_notice')
       .order('due_date', { ascending: false });
 
     if (error) throw error;
@@ -133,8 +133,8 @@ export async function fetchOtherNotices() {
       id: item.id.toString(),
       title: item.title || "",
       content: item.description || "",
-      category: "その他", // Default category since it's not in DB
-      categoryColor: CATEGORY_COLORS["その他"] || "#D8D8D8",
+      category: item.category || "その他",
+      categoryColor: CATEGORY_COLORS[item.category || "その他"] || "#D8D8D8",
       date: item.due_date ? formatDateJapanese(new Date(item.due_date)) : "",
     }));
   } catch (error) {
@@ -143,27 +143,134 @@ export async function fetchOtherNotices() {
   }
 }
 
-// Fetch teachers from users table
-// Note: This is a placeholder. Proper teacher tracking would need a separate table or role field
+// Fetch teachers from users table (role='teacher')
 export async function fetchTeachers() {
   try {
-    // For now, return all users as potential teachers
-    // In a real implementation, you'd want a roles or teachers table
-    const { data, error } = await supabase
+    // Step 1 & 2: Find teacher role and user IDs (already robust)
+    const { data: roleData, error: roleError } = await supabase
+      .from('roles')
+      .select('id')
+      .eq('name', 'teacher');
+
+    if (roleError || !roleData || roleData.length === 0) {
+      console.error("Could not find 'teacher' role in database. Returning empty teacher list.", roleError);
+      return [];
+    }
+    const teacherRoleId = roleData[0].id;
+
+    const { data: userRoles, error: userRolesError } = await supabase
+      .from('user_roles')
+      .select('user_id')
+      .eq('role_id', teacherRoleId);
+
+    if (userRolesError) {
+      console.error("Error fetching from user_roles:", userRolesError);
+      throw userRolesError;
+    }
+    if (!userRoles || userRoles.length === 0) {
+      return [];
+    }
+    const teacherIds = userRoles.map((ur: any) => ur.user_id);
+
+    // Step 3: Fetch teacher user details
+    const { data: teachers, error: teachersError } = await supabase
       .from('users')
       .select('id, name, email')
+      .in('id', teacherIds)
       .order('name', { ascending: true });
+
+    if (teachersError) {
+      console.error("Error fetching users:", teachersError);
+      throw teachersError;
+    }
+    if (!teachers) return [];
+
+    // Step 4: Fetch all relationships and names in batches
+    const { data: subjectLinks, error: subjectLinksError } = await supabase
+      .from('subject_teachers')
+      .select('teacher_id, subject_id')
+      .in('teacher_id', teacherIds);
+    if (subjectLinksError) throw subjectLinksError;
+
+    const { data: subsubjectLinks, error: subsubjectLinksError } = await supabase
+      .from('subsubject_teachers')
+      .select('teacher_id, subsubject_id')
+      .in('teacher_id', teacherIds);
+    if (subsubjectLinksError) throw subsubjectLinksError;
+
+    const { data: allSubjects, error: allSubjectsError } = await supabase.from('subjects').select('id, name');
+    if (allSubjectsError) throw allSubjectsError;
+    const subjectMap = new Map((allSubjects || []).map((s: any) => [s.id, s.name]));
+
+    const { data: allSubsubjects, error: allSubsubjectsError } = await supabase.from('subsubjects').select('id, name');
+    if (allSubsubjectsError) throw allSubsubjectsError;
+    const subsubjectMap = new Map((allSubsubjects || []).map((s: any) => [s.id, s.name]));
+
+    // Step 5: Map over teachers and attach their subjects and courses
+    return teachers.map((teacher) => {
+      const subjectIds = (subjectLinks || []).filter(l => l.teacher_id === teacher.id).map(l => l.subject_id);
+      const subjectNames = subjectIds.map(id => subjectMap.get(id)).filter(Boolean) as string[];
+
+      const subsubjectIds = (subsubjectLinks || []).filter(l => l.teacher_id === teacher.id).map(l => l.subsubject_id);
+      const courseNames = subsubjectIds.map(id => subsubjectMap.get(id)).filter(Boolean) as string[];
+
+      return {
+        id: teacher.id.toString(),
+        name: teacher.name || teacher.email || "名前なし",
+        email: teacher.email || "",
+        subjects: subjectNames,
+        courses: courseNames,
+      };
+    });
+
+  } catch (error) {
+    console.error('Error in fetchTeachers function:', error);
+    return [];
+  }
+}
+
+export async function fetchStudents() {
+  try {
+    // First, identify all teacher IDs to exclude them from the student list.
+    const { data: roleData, error: roleError } = await supabase
+      .from('roles')
+      .select('id')
+      .eq('name', 'teacher');
+
+    let teacherIds: number[] = [];
+    if (roleError || !roleData || roleData.length === 0) {
+      console.error("Could not find 'teacher' role for student exclusion, proceeding without exclusion.", roleError);
+    } else {
+      const teacherRoleId = roleData[0].id;
+      const { data: userRoles, error: userRolesError } = await supabase
+        .from('user_roles')
+        .select('user_id')
+        .eq('role_id', teacherRoleId);
+
+      if (userRolesError) {
+        console.error('Error fetching teacher roles for student exclusion:', userRolesError);
+      } else if (userRoles) {
+        teacherIds = userRoles.map((ur: any) => ur.user_id);
+      }
+    }
+
+    // Fetch all users that are NOT in the teacherIds list.
+    let query = supabase.from('users').select('id, name, email');
+    if (teacherIds.length > 0) {
+      query = query.not('id', 'in', `(${teacherIds.join(',')})`);
+    }
+    const { data, error } = await query.order('name', { ascending: true });
 
     if (error) throw error;
 
-    return (data || []).map((teacher: any) => ({
-      id: teacher.id.toString(),
-      name: teacher.name || teacher.email || "名前なし",
-      subjects: [], // Would need a separate table to track teacher subjects
-      email: teacher.email || "",
+    return (data || []).map((student: any) => ({
+      id: student.id.toString(),
+      name: student.name || student.email || "名前なし",
+      email: student.email || "",
+      class: "", // Will need to add class field to database
     }));
   } catch (error) {
-    console.error('Error fetching teachers:', error);
+    console.error('Error fetching students:', error);
     return [];
   }
 }
@@ -174,34 +281,63 @@ export async function fetchSubjectsWithCourses() {
     const { data: subjects, error: subjectsError } = await supabase
       .from('subjects')
       .select('id, name')
-      .order('name', { ascending: true });
+      .order('id', { ascending: true });
 
     if (subjectsError) throw subjectsError;
 
     const { data: subsubjects, error: subsubjectsError } = await supabase
       .from('subsubjects')
       .select('id, name, subject_id')
-      .order('name', { ascending: true });
+      .order('subject_id', { ascending: true });
 
     if (subsubjectsError) throw subsubjectsError;
 
-    // Transform to component format
+    // Transform to component format, maintaining subject_id order
     const result: any[] = [];
     let idCounter = 1;
 
-    (subsubjects || []).forEach((subsubject: any) => {
-      const subject = (subjects || []).find((s: any) => s.id === subsubject.subject_id);
-      if (subject) {
+    // Sort subjects by ID first, then add their subsubjects
+    const sortedSubjects = (subjects || []).sort((a: any, b: any) => a.id - b.id);
+
+    sortedSubjects.forEach((subject: any) => {
+      const subjectSubsubjects = (subsubjects || [])
+        .filter((sub: any) => sub.subject_id === subject.id)
+        .sort((a: any, b: any) => a.id - b.id);
+
+      subjectSubsubjects.forEach((subsubject: any) => {
         result.push({
-          id: (idCounter++).toString(),
-          category: subject.name,
-          categoryColor: SUBJECT_COLORS[subject.name] || "#D8D8D8",
-          courseName: subsubject.name,
+          id: `${subject.id}-${subsubject.id}`, // Stable composite ID
+          category: subject.name || "", // Null check
+          categoryColor: SUBJECT_COLORS[subject.name || ""] || "#D8D8D8",
+          courseName: subsubject.name || "", // Null check
+          subjectId: subject.id,
+          subsubjectId: subsubject.id,
         });
-      }
+      });
     });
 
     return result;
+  } catch (error) {
+    console.error('Error fetching subjects:', error);
+    return [];
+  }
+}
+
+// Fetch all subjects (for multi-select dropdown in AddTeacherModal)
+export async function fetchSubjects() {
+  try {
+    const { data: subjects, error } = await supabase
+      .from('subjects')
+      .select('id, name')
+      .order('id', { ascending: true });
+
+    if (error) throw error;
+
+    return (subjects || []).map((subject: any) => ({
+      id: subject.id.toString(),
+      name: subject.name,
+      color: SUBJECT_COLORS[subject.name] || "#D8D8D8",
+    }));
   } catch (error) {
     console.error('Error fetching subjects:', error);
     return [];
@@ -326,7 +462,7 @@ export async function createOtherNotice(notice: {
         created_by: userId,
         title: notice.title,
         description: notice.content,
-        type: 'other',
+        type: 'general_notice',
         due_date: parseDateJapanese(notice.date),
         submission_method: '', // Required field
       })
@@ -518,19 +654,8 @@ export async function createSubsubject(data: { category: string; courseName: str
 }
 
 // Update subsubject
-export async function updateSubsubject(courseName: string, updates: { category: string; courseName: string }) {
+export async function updateSubsubject(subsubjectId: number, updates: { category: string; courseName: string }) {
   try {
-    // Find subsubject by name
-    const { data: subsubject } = await supabase
-      .from('subsubjects')
-      .select('id')
-      .eq('name', courseName)
-      .maybeSingle();
-
-    if (!subsubject) {
-      throw new Error('Subsubject not found');
-    }
-
     // Find or create subject
     let subjectId: number | null = null;
     const { data: existingSubject } = await supabase
@@ -559,7 +684,7 @@ export async function updateSubsubject(courseName: string, updates: { category: 
         subject_id: subjectId,
         name: updates.courseName,
       })
-      .eq('id', subsubject.id);
+      .eq('id', subsubjectId);
 
     if (error) throw error;
   } catch (error) {
@@ -569,12 +694,12 @@ export async function updateSubsubject(courseName: string, updates: { category: 
 }
 
 // Delete subsubjects
-export async function deleteSubsubjects(courseNames: string[]) {
+export async function deleteSubsubjects(subsubjectIds: number[]) {
   try {
     const { error } = await supabase
       .from('subsubjects')
       .delete()
-      .in('name', courseNames);
+      .in('id', subsubjectIds);
 
     if (error) throw error;
   } catch (error) {
@@ -585,10 +710,11 @@ export async function deleteSubsubjects(courseNames: string[]) {
 
 // ============ Teachers CRUD Functions ============
 
-// Create teacher (user)
+// Create teacher (user with role='teacher')
 export async function createTeacher(teacher: { name: string; email: string; subjects: string[] }) {
   try {
-    const { data, error } = await supabase
+    // 1. Create the user without the role
+    const { data: newTeacher, error: userError } = await supabase
       .from('users')
       .insert({
         name: teacher.name,
@@ -597,16 +723,80 @@ export async function createTeacher(teacher: { name: string; email: string; subj
       .select()
       .single();
 
-    if (error) throw error;
-    return data;
+    if (userError) throw userError;
+
+    // 2. Get the 'teacher' role ID
+    const { data: roleData, error: roleError } = await supabase
+      .from('roles')
+      .select('id')
+      .eq('name', 'teacher')
+      .single();
+
+    if (roleError) throw roleError;
+
+    // 3. Link user to role in user_roles
+    const { error: userRoleError } = await supabase
+      .from('user_roles')
+      .insert({ user_id: newTeacher.id, role_id: roleData.id });
+
+    if (userRoleError) throw userRoleError;
+
+    // 4. Handle subjects (using the correct 'subject_teachers' table)
+    if (teacher.subjects && teacher.subjects.length > 0) {
+      const { data: subjects, error: subjectsError } = await supabase
+        .from('subjects')
+        .select('id, name')
+        .in('name', teacher.subjects);
+
+      if (subjectsError) throw subjectsError;
+
+      const teacherSubjectRows = (subjects || []).map((subject: any) => ({
+        teacher_id: newTeacher.id, // Correct column name
+        subject_id: subject.id,
+      }));
+
+      if (teacherSubjectRows.length > 0) {
+        const { error: tsError } = await supabase
+          .from('subject_teachers') // Correct table name
+          .insert(teacherSubjectRows);
+
+        if (tsError) throw tsError;
+      }
+    }
+
+    return newTeacher;
   } catch (error) {
     console.error('Error creating teacher:', error);
     throw error;
   }
 }
 
-// Update teacher
-export async function updateTeacher(id: string, updates: { name: string; subjects: string[] }) {
+// Create student (user with role='student')
+export async function createStudent(student: { name: string; email: string; class?: string }) {
+  try {
+    const { data: newStudent, error: userError } = await supabase
+      .from('users')
+      .insert({ name: student.name, email: student.email })
+      .select()
+      .single();
+
+    if (userError) throw userError;
+
+    const { data: roleData, error: roleError } = await supabase.from('roles').select('id').eq('name', 'student').single();
+    if (roleError) throw roleError;
+
+    const { error: userRoleError } = await supabase.from('user_roles').insert({ user_id: newStudent.id, role_id: roleData.id });
+    if (userRoleError) throw userRoleError;
+
+    return newStudent;
+  } catch (error) {
+    console.error('Error creating student:', error);
+    throw error;
+  }
+}
+
+// Update student
+export async function updateStudent(id: string, updates: { name: string; class?: string }) {
   try {
     const { error } = await supabase
       .from('users')
@@ -617,6 +807,102 @@ export async function updateTeacher(id: string, updates: { name: string; subject
 
     if (error) throw error;
   } catch (error) {
+    console.error('Error updating student:', error);
+    throw error;
+  }
+}
+
+// Delete students
+export async function deleteStudents(ids: string[]) {
+  try {
+    const numericIds = ids.map(id => parseInt(id));
+    const { error } = await supabase
+      .from('users')
+      .delete()
+      .in('id', numericIds);
+
+    if (error) throw error;
+  } catch (error) {
+    console.error('Error deleting students:', error);
+    throw error;
+  }
+}
+
+// Update teacher
+export async function updateTeacher(id: string, updates: { name: string; subjects: string[]; courses: string[] }) {
+  try {
+    // Update teacher name
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({
+        name: updates.name,
+      })
+      .eq('id', parseInt(id));
+
+    if (updateError) throw updateError;
+
+    // Delete existing teacher-subject relationships
+    const { error: deleteSubjectsError } = await supabase
+      .from('subject_teachers')
+      .delete()
+      .eq('teacher_id', parseInt(id));
+
+    if (deleteSubjectsError) throw deleteSubjectsError;
+
+    // Delete existing teacher-subsubject relationships
+    const { error: deleteSubsubjectsError } = await supabase
+      .from('subsubject_teachers')
+      .delete()
+      .eq('teacher_id', parseInt(id));
+
+    if (deleteSubsubjectsError) throw deleteSubsubjectsError;
+
+    // Get subject IDs from subject names and insert new relationships
+    if (updates.subjects && updates.subjects.length > 0) {
+      const { data: subjects, error: subjectsError } = await supabase
+        .from('subjects')
+        .select('id, name')
+        .in('name', updates.subjects);
+
+      if (subjectsError) throw subjectsError;
+
+      const teacherSubjectRows = (subjects || []).map((subject: any) => ({
+        teacher_id: parseInt(id),
+        subject_id: subject.id,
+      }));
+
+      if (teacherSubjectRows.length > 0) {
+        const { error: insertError } = await supabase
+          .from('subject_teachers')
+          .insert(teacherSubjectRows);
+
+        if (insertError) throw insertError;
+      }
+    }
+
+    // Get subsubject IDs from course names and insert new relationships
+    if (updates.courses && updates.courses.length > 0) {
+      const { data: subsubjects, error: subsubjectsError } = await supabase
+        .from('subsubjects')
+        .select('id, name')
+        .in('name', updates.courses);
+
+      if (subsubjectsError) throw subsubjectsError;
+
+      const teacherSubsubjectRows = (subsubjects || []).map((subsubject: any) => ({
+        teacher_id: parseInt(id),
+        subsubject_id: subsubject.id,
+      }));
+
+      if (teacherSubsubjectRows.length > 0) {
+        const { error: insertError } = await supabase
+          .from('subsubject_teachers')
+          .insert(teacherSubsubjectRows);
+
+        if (insertError) throw insertError;
+      }
+    }
+  } catch (error) {
     console.error('Error updating teacher:', error);
     throw error;
   }
@@ -626,12 +912,35 @@ export async function updateTeacher(id: string, updates: { name: string; subject
 export async function deleteTeachers(ids: string[]) {
   try {
     const numericIds = ids.map(id => parseInt(id));
-    const { error } = await supabase
+
+    // 1. Delete from user_roles
+    const { error: userRolesError } = await supabase
+      .from('user_roles')
+      .delete()
+      .in('user_id', numericIds);
+    if (userRolesError) throw userRolesError;
+
+    // 2. Delete from subject_teachers
+    const { error: subjectTeachersError } = await supabase
+      .from('subject_teachers')
+      .delete()
+      .in('teacher_id', numericIds);
+    if (subjectTeachersError) throw subjectTeachersError;
+
+    // 3. Delete from subsubject_teachers
+    const { error: subsubjectTeachersError } = await supabase
+      .from('subsubject_teachers')
+      .delete()
+      .in('teacher_id', numericIds);
+    if (subsubjectTeachersError) throw subsubjectTeachersError;
+
+    // 4. Finally, delete from users
+    const { error: usersError } = await supabase
       .from('users')
       .delete()
       .in('id', numericIds);
+    if (usersError) throw usersError;
 
-    if (error) throw error;
   } catch (error) {
     console.error('Error deleting teachers:', error);
     throw error;
