@@ -1,4 +1,4 @@
-// AddTeacherModal.tsx (ポップアップ部品)
+// AddTeacherFormModal.tsx (新しく作成するファイル)
 
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
@@ -21,8 +21,8 @@ interface AddTeacherModalProps {
   onSave: (teachers: Omit<TeacherRow, "id">[]) => void; 
 }
 
-// コンポーネント名をAddTeacherModalとします
-export function AddTeacherModal({ open, onClose, onSave }: AddTeacherModalProps) { 
+// コンポーネント名を親ファイルでインポートした名前に合わせる
+export function AddTeacherFormModal({ open, onClose, onSave }: AddTeacherModalProps) { 
   const [rows, setRows] = useState<TeacherRow[]>([
     { id: "1", name: "", subjects: "", email: "" },
   ]);

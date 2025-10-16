@@ -38,17 +38,26 @@ export function AddSubjectModal({ open, onClose, onSave }: AddSubjectModalProps)
     { id: "1", category: "", categoryColor: "", courseName: "" },
   ]);
 
+  /**
+   * 新しい行を追加する（教科・科目追加ボタンの機能）
+   */
   const handleAddRow = () => {
     const newId = (Math.max(...rows.map((r) => parseInt(r.id)), 0) + 1).toString();
     setRows([...rows, { id: newId, category: "", categoryColor: "", courseName: "" }]);
   };
 
+  /**
+   * 行を削除する
+   */
   const handleRemoveRow = (id: string) => {
     if (rows.length > 1) {
       setRows(rows.filter((row) => row.id !== id));
     }
   };
 
+  /**
+   * 教科の選択変更を処理し、色を更新する
+   */
   const handleCategoryChange = (id: string, category: string) => {
     const color = categoryOptions.find((opt) => opt.value === category)?.color || "";
     setRows(
@@ -58,28 +67,44 @@ export function AddSubjectModal({ open, onClose, onSave }: AddSubjectModalProps)
     );
   };
 
+  /**
+   * 科目名の入力を処理する
+   */
   const handleCourseNameChange = (id: string, courseName: string) => {
     setRows(
       rows.map((row) => (row.id === id ? { ...row, courseName } : row))
     );
   };
 
+  /**
+   * データを保存する
+   */
   const handleSave = () => {
-    const validRows = rows.filter((row) => row.category && row.courseName);
+    // 教科と科目名が両方入力されている行のみを抽出
+    const validRows = rows.filter((row) => row.category && row.courseName.trim() !== "");
+    
     if (validRows.length > 0) {
+      // IDを除外してonSaveコールバックに渡す
       onSave(validRows.map(({ category, categoryColor, courseName }) => ({
         category,
         categoryColor,
-        courseName,
+        courseName: courseName.trim(), // 保存時に空白をトリム
       })));
       handleClose();
     }
   };
 
+  /**
+   * モーダルを閉じる処理（状態をリセット）
+   */
   const handleClose = () => {
     setRows([{ id: "1", category: "", categoryColor: "", courseName: "" }]);
     onClose();
   };
+  
+  // 修正された保存ボタンのdisabled判定ロジック:
+  // 有効な入力 (教科が選択され、かつ科目名が空でない) が一つでもあれば false (非活性化しない)
+  const isSaveDisabled = !rows.some(row => row.category && row.courseName.trim() !== "");
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -147,7 +172,8 @@ export function AddSubjectModal({ open, onClose, onSave }: AddSubjectModalProps)
                           variant="ghost"
                           size="sm"
                           onClick={() => handleRemoveRow(row.id)}
-                          disabled={rows.length === 1}
+                          // 行が1つの場合は削除ボタンを非活性化
+                          disabled={rows.length === 1} 
                           className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -179,6 +205,7 @@ export function AddSubjectModal({ open, onClose, onSave }: AddSubjectModalProps)
           <Button
             onClick={handleSave}
             className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90"
+            disabled={isSaveDisabled} // 修正されたロジックを適用
           >
             保存
           </Button>
