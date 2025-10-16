@@ -19,6 +19,7 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
+    "baseUrl": ".", // 👈 これで絶対パスが有効になります
     "paths": {
       "@/*": [
         "./src/*"
